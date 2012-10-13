@@ -16,6 +16,10 @@ classdef GPFA
         C           % factor loadings
         D           % stimulus weights
         R           % independent noise variances
+        T           % # time points per trial
+        N           % # trials
+        p           % # unobserved factors
+        q           % # neurons
     end
     
     properties (Access = private)
@@ -111,22 +115,67 @@ classdef GPFA
             %   convergence but at most maxIter iterations.
             
             if nargin < 2, maxIter = Inf; end
+            [Y, S, C, D, R] = expand(self);
+            
+            % pre-compute GP covariance and inverse
+            p = self.p;
+            q = self.q;
+            T = self.T;
+            N = self.N;
+            t = 1 : T;
+            K = self.k(t, t');
+            Ki = inv(K);
+            Kb = kron(K, eye(p));
+            Kbi = kron(Ki, eye(p));
+            Sn = reshape(S, [T T N]);
+            Yn = reshape(Y, [q T N]);
+            
             iter = 0;
-            logLikeBase = NaN;
-            while iter < maxIter && (iter < 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance)
+%             logLikeBase = NaN;
+%             while iter < maxIter && (iter < 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance)
+            while iter < maxIter
                 
-                if ~mod(iter, 5), fprintf('.'), end
                 iter = iter + 1;
 
                 % Perform E step
-
-                % Perform M step
+                RiC = bsxfun(@rdivide, C, diag(R));
+                CRiC = C' * RiC;
+                Mi = invPerSymm(Kbi + kron(eye(T), CRiC), p);
+                RbiCb = kron(eye(T), RiC); % [TODO] can kron be optimized?
+                Rbi = kron(eye(T), diag(1 ./ diag(R)));
+                Cb = kron(eye(T), C);
+                KbCb = Kb * Cb'; % [TODO] optimize: K is diagonal
+                Q = KbCb * (Rbi - RbiCb * Mi * RbiCb');
+                YDS = bsxfun(@minus, Y, D * S);
+                Ex = Q * reshape(YDS, q * T, N);
+                Ex = reshape(Ex, [p T N]);
+                Exx = Kb - Q * KbCb';
                 
-                % calculate log-likelihood
-            
-                if iter == 1
-                    logLikeBase = self.logLike(end);
+                % Perform M step
+                T1 = zeros(q, p + T);
+                T2 = zeros(p + T);
+                for t = 1 : T
+                    tt = (1 : p) + p * (t - 1);
+                    for n = 1 : N
+                        x = Ex(:, t, n);
+                        s = Sn(:, t, n);
+                        T1 = T1 + Yn(:, t, n) * [x', s'];
+                        T2 = T2 + [Exx(tt, tt) + x * x', x * s'; s * x', s * s'];
+                    end
                 end
+                CD = T1 / T2;
+                C = CD(:, 1 : p);
+                D = CD(:, p + (1 : T));
+                
+                R = diag(mean(YDS .^ 2, 2) - ...
+                    sum(bsxfun(@times, YDS * reshape(Ex, p, T * N)', C), 2) / (T * N));
+
+                % calculate log-likelihood
+                % TODO
+                
+%                 if iter == 1
+%                     logLikeBase = self.logLike(end);
+%                 end
             end
         end
         
