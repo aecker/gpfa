@@ -60,8 +60,6 @@ classdef GPFA
             %
             %   See GPFA for optional parameters to use for fitting.
             
-            self.runtime = now();
-            
             % make sure dimensions of input are correct
             % TODO
             
@@ -73,10 +71,6 @@ classdef GPFA
             
             % run EM
             self = self.EM();
-
-            % output run time
-            self.runtime = (now() - self.runtime) * 24 * 60 * 60; % convert to sec
-            fprintf('Total run time: %.1f sec.\n\n\n', self.runtime)
         end
     end
     
