@@ -181,6 +181,39 @@ classdef GPFA
         
     end
     
+    
+    methods (Static)
+        
+        function [gpfa, X] = toyExample()
+            % Create toy example for testing
+            
+            rng(1);
+            N = 20;
+            T = 5;
+            p = 2;
+            q = 8;
+
+            phi = cumsum(randn(1, T * N));
+            phi = filtfilt(gausswin(5) / 2, 1, phi);
+            X = [cos(phi); sin(phi)];
+            
+            phi = (0 : q - 1) / q * 2 * pi;
+            C = [cos(phi); sin(phi)]';
+            D = rand(q, T);
+            S = repmat(eye(T), 1, N);
+            R = 0.02 * eye(q);
+            Y = chol(R)' * randn(q, T * N) + C * X + D * S;
+            
+            gpfa = collect(GPFA, Y, S, C, D, R);
+            gpfa.T = T;
+            gpfa.N = N;
+            gpfa.p = p;
+            gpfa.q = q;
+        end
+        
+    end
+    
+end
 
 
 function [invM, logdet_M] = invPerSymm(M, q)
