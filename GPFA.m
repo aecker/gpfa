@@ -11,7 +11,6 @@ classdef GPFA
     properties
         params      % parameters for fitting
         Y           % spike count data
-        S           % stimulus predictors
         k           % GP covariance function
         C           % factor loadings
         D           % stimulus weights
@@ -55,10 +54,9 @@ classdef GPFA
         end
         
         
-        function self = fit(self, Y, S)
+        function self = fit(self, Y)
             % Fit the model
-            %   self = fit(self, Y, S) fits the model to data Y using
-            %   stimulus predictors S.
+            %   self = fit(self, Y) fits the model to data Y.
             %
             %   See GPFA for optional parameters to use for fitting.
             
@@ -85,18 +83,16 @@ classdef GPFA
     
     methods (Access = protected)
         
-        function [Y, S, C, D, R] = expand(self)
+        function [Y, C, D, R] = expand(self)
             Y = self.Y;
-            S = self.S;
             C = self.C;
             D = self.D;
             R = self.R;
         end
         
         
-        function self = collect(self, Y, S, C, D, R)
+        function self = collect(self, Y, C, D, R)
             self.Y = Y;
-            self.S = S;
             self.C = C;
             self.D = D;
             self.R = R;
@@ -115,7 +111,7 @@ classdef GPFA
             %   convergence but at most maxIter iterations.
             
             if nargin < 2, maxIter = Inf; end
-            [Y, S, C, D, R] = expand(self);
+            [Y, C, D, R] = expand(self);
             
             % pre-compute GP covariance and inverse
             p = self.p;
@@ -127,7 +123,7 @@ classdef GPFA
             Ki = inv(K);
             Kb = kron(K, eye(p));
             Kbi = kron(Ki, eye(p));
-            Sn = reshape(S, [T T N]);
+            S = eye(T);
             Yn = reshape(Y, [q T N]);
             
             iter = 0;
@@ -158,7 +154,8 @@ classdef GPFA
                     tt = (1 : p) + p * (t - 1);
                     for n = 1 : N
                         x = Ex(:, t, n);
-                        s = Sn(:, t, n);
+                        s = S(:, t);
+                        % [TODO] make more efficient: s mostly zero
                         T1 = T1 + Yn(:, t, n) * [x', s'];
                         T2 = T2 + [Exx(tt, tt) + x * x', x * s'; s * x', s * s'];
                     end
@@ -204,7 +201,7 @@ classdef GPFA
             R = 0.02 * eye(q);
             Y = chol(R)' * randn(q, T * N) + C * X + D * S;
             
-            gpfa = collect(GPFA, Y, S, C, D, R);
+            gpfa = collect(GPFA, Y, S, D, R);
             gpfa.T = T;
             gpfa.N = N;
             gpfa.p = p;
