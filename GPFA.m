@@ -12,7 +12,7 @@ classdef GPFA
         params      % parameters for fitting
         Y           % spike count data
         S           % stimulus predictors
-        K           % GP covariance
+        k           % GP covariance function
         C           % factor loadings
         D           % stimulus weights
         R           % independent noise variances
@@ -37,10 +37,17 @@ classdef GPFA
             p = inputParser;
             p.KeepUnmatched = true;
             p.addOptional('Tau', 5);
+            p.addOptional('SigmaN', 1e-3);
             p.addOptional('Seed', 1);
             p.addOptional('Tolerance', 0.0005);
             p.parse(varargin{:});
             self.params = p.Results;
+
+            % covariance function
+            tau = self.params.Tau;
+            sn = self.params.SigmaN;
+            sf = 1 - sn;
+            self.k = @(s, t) sf * exp(-1/2 * bsxfun(@minus, s, t) .^ 2 / tau ^ 2) + sn * bsxfun(@eq, s, t);
         end
         
         
@@ -74,20 +81,18 @@ classdef GPFA
     
     methods (Access = protected)
         
-        function [Y, S, K, C, D, R] = expand(self)
+        function [Y, S, C, D, R] = expand(self)
             Y = self.Y;
             S = self.S;
-            K = self.K;
             C = self.C;
             D = self.D;
             R = self.R;
         end
         
         
-        function self = collect(self, Y, S, K, C, D, R)
+        function self = collect(self, Y, S, C, D, R)
             self.Y = Y;
             self.S = S;
-            self.K = K;
             self.C = C;
             self.D = D;
             self.R = R;
