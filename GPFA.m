@@ -216,7 +216,7 @@ classdef GPFA
     
     methods (Static)
         
-        function [gpfa, X] = toyExample()
+        function [gpfa, X, Y] = toyExample()
             % Create toy example for testing
             
             rng(1);
@@ -227,7 +227,7 @@ classdef GPFA
 
             phi = cumsum(randn(1, T * N));
             phi = filtfilt(gausswin(5) / 2, 1, phi);
-            X = [cos(phi); sin(phi)];
+            X = [cos(phi); 2 * sin(phi)];
             
             phi = (0 : q - 1) / q * 2 * pi;
             C = [cos(phi); sin(phi)]';
@@ -235,8 +235,9 @@ classdef GPFA
             S = repmat(eye(T), 1, N);
             R = 0.02 * eye(q);
             Y = chol(R)' * randn(q, T * N) + C * X + D * S;
+            Y = reshape(Y, [q T N]);
             
-            gpfa = collect(GPFA, Y, S, D, R);
+            gpfa = collect(GPFA, Y, C, D, R, X);
             gpfa.T = T;
             gpfa.N = N;
             gpfa.p = p;
