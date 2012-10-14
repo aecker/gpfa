@@ -196,6 +196,13 @@ classdef GPFA
                     plot(C(:, 1), 'k')
                 end
             end
+            
+            % orthogonalize
+            [C, S, V] = svd(C, 'econ');
+            X = reshape(X, p, T * N);
+            X = S * V' * X;
+            X = reshape(X, [p T N]);
+            
             self = collect(self, Y, C, D, R, X);
         end
         
