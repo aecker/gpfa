@@ -55,21 +55,39 @@ classdef GPFA
         end
         
         
-        function self = fit(self, Y)
+        function self = fit(self, Y, p)
             % Fit the model
-            %   self = fit(self, Y) fits the model to data Y.
+            %   self = fit(self, Y, p) fits the model to data Y using p
+            %   latent factors.
             %
             %   See GPFA for optional parameters to use for fitting.
             
-            % make sure dimensions of input are correct
-            % TODO
+            % determine dimensionality of the problem
+            [q, T, N] = size(Y);
+            
+            self.q = q;
+            self.T = T;
+            self.N = N;
+            self.Y = Y;
+            self.p = p;
             
             % ensure deterministic behavior
             rng(self.params.Seed);
             
-            % initialize model using factor analysis
-            % TODO
+            % initialize stimulus weights using linear regression
+            Y = reshape(Y, q, T * N);
+            S = repmat(eye(T), 1, N);
+            self.D = Y / S;
             
+            % initialize factor loadings using PCA
+            resid = Y - self.D * S;
+            Q = cov(resid');
+            [self.C, Lambda] = eigs(Q, p);
+            
+            % initialize private noise as residual variance not accounted
+            % for by PCA and stimulus
+            self.R = diag(diag(Q - self.C * Lambda * self.C'));
+
             % run EM
             self = self.EM();
         end
