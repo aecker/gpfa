@@ -44,6 +44,7 @@ classdef GPFA
             p.addOptional('SigmaN', 1e-3);
             p.addOptional('Seed', 1);
             p.addOptional('Tolerance', 0.0005);
+            p.addOptional('Verbose', false);
             p.parse(varargin{:});
             self.params = p.Results;
 
@@ -188,6 +189,12 @@ classdef GPFA
 %                 if iter == 1
 %                     logLikeBase = self.logLike(end);
 %                 end
+                if self.params.Verbose
+                    subplot(211)
+                    plot(self.logLike, '.-k')
+                    subplot(212), hold all
+                    plot(C(:, 1), 'k')
+                end
             end
             self = collect(self, Y, C, D, R, X);
         end
