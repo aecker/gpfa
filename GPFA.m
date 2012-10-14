@@ -143,9 +143,8 @@ classdef GPFA
             Yn = reshape(Y, [q T N]);
             
             iter = 0;
-%             logLikeBase = NaN;
-%             while iter < maxIter && (iter < 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance)
-            while iter < maxIter
+            logLikeBase = NaN;
+            while iter < maxIter && (iter < 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance)
                 
                 iter = iter + 1;
 
@@ -157,11 +156,18 @@ classdef GPFA
                 Rbi = kron(eye(T), diag(1 ./ diag(R)));
                 Cb = kron(eye(T), C);
                 KbCb = Kb * Cb'; % [TODO] optimize: K is diagonal
-                Q = KbCb * (Rbi - RbiCb * Mi * RbiCb');
+                CKCRi = Rbi - RbiCb * Mi * RbiCb';
+                Q = KbCb * CKCRi;
                 YDS = bsxfun(@minus, Y, D * S);
-                Ex = Q * reshape(YDS, q * T, N);
-                Ex = reshape(Ex, [p T N]);
-                Exx = Kb - Q * KbCb';
+                YDS = reshape(YDS, q * T, N);
+                X = Q * YDS;
+                X = reshape(X, [p T N]);
+                XX = Kb - Q * KbCb';
+
+                % calculate log-likelihood
+                self.logLike(end + 1) = ...
+                    - N * sum(log(diag(chol(CKCRi)))) ...
+                    - sum(sum(YDS .* (CKCRi * YDS))) / 2;
                 
                 % Perform M step
                 T1 = zeros(q, p + T);
@@ -169,26 +175,25 @@ classdef GPFA
                 for t = 1 : T
                     tt = (1 : p) + p * (t - 1);
                     for n = 1 : N
-                        x = Ex(:, t, n);
+                        x = X(:, t, n);
                         s = S(:, t);
                         % [TODO] make more efficient: s mostly zero
                         T1 = T1 + Yn(:, t, n) * [x', s'];
-                        T2 = T2 + [Exx(tt, tt) + x * x', x * s'; s * x', s * s'];
+                        T2 = T2 + [XX(tt, tt) + x * x', x * s'; s * x', s * s'];
                     end
                 end
                 CD = T1 / T2;
                 C = CD(:, 1 : p);
                 D = CD(:, p + (1 : T));
                 
+                YDS = reshape(YDS, q, T * N);
                 R = diag(mean(YDS .^ 2, 2) - ...
-                    sum(bsxfun(@times, YDS * reshape(Ex, p, T * N)', C), 2) / (T * N));
-
-                % calculate log-likelihood
-                % TODO
+                    sum(bsxfun(@times, YDS * reshape(X, p, T * N)', C), 2) / (T * N));
                 
-%                 if iter == 1
-%                     logLikeBase = self.logLike(end);
-%                 end
+                if iter == 1
+                    logLikeBase = self.logLike(end);
+                end
+                
                 if self.params.Verbose
                     subplot(211)
                     plot(self.logLike, '.-k')
