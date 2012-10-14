@@ -15,6 +15,7 @@ classdef GPFA
         C           % factor loadings
         D           % stimulus weights
         R           % independent noise variances
+        X           % latent factors (GP)
         T           % # time points per trial
         N           % # trials
         p           % # unobserved factors
@@ -77,19 +78,21 @@ classdef GPFA
     
     methods (Access = protected)
         
-        function [Y, C, D, R] = expand(self)
+        function [Y, C, D, R, X] = expand(self)
             Y = self.Y;
             C = self.C;
             D = self.D;
             R = self.R;
+            X = self.X;
         end
         
         
-        function self = collect(self, Y, C, D, R)
+        function self = collect(self, Y, C, D, R, X)
             self.Y = Y;
             self.C = C;
             self.D = D;
             self.R = R;
+            self.X = X;
         end
         
     end
@@ -168,6 +171,7 @@ classdef GPFA
 %                     logLikeBase = self.logLike(end);
 %                 end
             end
+            self = collect(self, Y, C, D, R, X);
         end
         
     end
