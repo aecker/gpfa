@@ -12,6 +12,7 @@ classdef GPFA
         params      % parameters for fitting
         Y           % spike count data
         k           % GP covariance function
+        tau         % GP timescales
         C           % factor loadings
         D           % stimulus weights
         R           % independent noise variances
@@ -40,7 +41,6 @@ classdef GPFA
             % parse optional parameters
             p = inputParser;
             p.KeepUnmatched = true;
-            p.addOptional('Tau', 5);
             p.addOptional('SigmaN', 1e-3);
             p.addOptional('Seed', 1);
             p.addOptional('Tolerance', 0.0005);
@@ -49,10 +49,9 @@ classdef GPFA
             self.params = p.Results;
 
             % covariance function
-            tau = self.params.Tau;
             sn = self.params.SigmaN;
             sf = 1 - sn;
-            self.k = @(s, t) sf * exp(-1/2 * bsxfun(@minus, s, t) .^ 2 / tau ^ 2) + sn * bsxfun(@eq, s, t);
+            self.k = @(t, tau) sf * exp(-1/2 * t .^ 2 / tau ^ 2) + sn * (t == 0);
         end
         
         
@@ -88,6 +87,10 @@ classdef GPFA
             % initialize private noise as residual variance not accounted
             % for by PCA and stimulus
             self.R = diag(diag(Q - self.C * Lambda * self.C'));
+            
+            % initialize taus to unity
+            %self.tau = ones(p, 1);
+            self.tau = exp(randn(p, 1));
 
             % run EM
             self = self.EM();
@@ -97,23 +100,40 @@ classdef GPFA
     
     methods (Access = protected)
         
-        function [Y, C, D, R, X] = expand(self)
+        function [Y, C, D, R, tau, X] = expand(self)
             Y = self.Y;
             C = self.C;
             D = self.D;
             R = self.R;
+            tau = self.tau;
             X = self.X;
         end
         
         
-        function self = collect(self, Y, C, D, R, X)
+        function self = collect(self, Y, C, D, R, tau, X)
             self.Y = Y;
             self.C = C;
             self.D = D;
             self.R = R;
+            self.tau = tau;
             self.X = X;
         end
         
+        function [E, dEdtau] = Etau(self, tau, EXX)
+            % EXX is the sum (over N) of the second moments of X
+            
+            sigmaf = 1 - self.params.SigmaN;
+            N = self.N;
+            t = 0 : self.T - 1;
+            [Ki, logdetK] = invToeplitz(self.k(t, tau));
+            ttsq = bsxfun(@minus, t, t') .^ 2;
+            dKdtau = sigmaf ^ 2 * ttsq / tau ^ 3 .* exp(-0.5 * ttsq / tau ^ 2);
+            dEdK = 0.5 * (N * Ki - Ki * EXX * Ki);
+            dEdtau = dEdK(:)' * dKdtau(:);
+            E = 0.5 * (N * logdetK + EXX(:)' * Ki(:));
+%             E = 0.5 * (EXX(:)' * Ki(:));
+        end
+
     end
     
     
@@ -127,7 +147,7 @@ classdef GPFA
             %   convergence but at most maxIter iterations.
             
             if nargin < 2, maxIter = Inf; end
-            [Y, C, D, R] = expand(self);
+            [Y, C, D, R, tau] = self.expand();
             
             % pre-compute GP covariance and inverse
             p = self.p;
@@ -185,6 +205,15 @@ classdef GPFA
                 R = diag(mean(YDS .^ 2, 2) - ...
                     sum(bsxfun(@times, YDS * reshape(EX, p, T * N)', C), 2) / (T * N));
                 
+                % maximize tau
+                for i = 1 : p
+                    ndx = i : p : T * p;
+                    EXi = permute(EX(i, :, :), [2 3 1]);
+                    EXX = N * VarX(ndx, ndx) + (EXi * EXi');
+                    fun = @(tau) self.Etau(tau, EXX);
+                    tau(i) = minimize(tau(i), fun, 50);
+                end
+
                 if iter == 1
                     logLikeBase = self.logLike(end);
                 end
@@ -203,7 +232,7 @@ classdef GPFA
             EX = S * V' * EX;
             EX = reshape(EX, [p T N]);
             
-            self = self.collect(Y, C, D, R, EX);
+            self = self.collect(Y, C, D, R, tau, EX);
         end
         
         
@@ -226,28 +255,35 @@ classdef GPFA
     
     methods (Static)
         
-        function [gpfa, X, Y] = toyExample()
+        function [gpfa, Y] = toyExample()
             % Create toy example for testing
             
             rng(1);
-            N = 20;
-            T = 5;
+            N = 100;
+            T = 20;
             p = 2;
             q = 8;
+            tau = [4; 1];
 
-            phi = cumsum(randn(1, T * N));
-            phi = filtfilt(gausswin(5) / 2, 1, phi);
-            X = [cos(phi); 2 * sin(phi)];
+            gpfa = GPFA('SigmaN', 0.1);
+            
+            K = toeplitz(gpfa.k(0 : T - 1, tau(1)));
+            X1 = chol(K)' * randn(T, N);
+            K = toeplitz(gpfa.k(0 : T - 1, tau(2)));
+            X2 = chol(K)' * randn(T, N);
+            X = [X1(:), X2(:)]';
+            X = X1(:)';
             
             phi = (0 : q - 1) / q * 2 * pi;
-            C = [cos(phi); sin(phi)]';
+            C = [cos(phi); sin(phi)]' / sqrt(q / 2);
+            C = cos(phi)' / sqrt(q / 2);
             D = rand(q, T);
             S = repmat(eye(T), 1, N);
             R = 0.02 * eye(q);
             Y = chol(R)' * randn(q, T * N) + C * X + D * S;
             Y = reshape(Y, [q T N]);
             
-            gpfa = collect(GPFA, Y, C, D, R, X);
+            gpfa = gpfa.collect(Y, C, D, R, tau, X);
             gpfa.T = T;
             gpfa.N = N;
             gpfa.p = p;
@@ -293,3 +329,4 @@ if nargout == 2
 end
 
 end
+
