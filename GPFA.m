@@ -162,7 +162,6 @@ classdef GPFA
             T = self.T;
             N = self.N;
             S = eye(T);
-            [Kb, Kbi] = self.makeKb();
             Yn = reshape(Y, [q T N]);
             
             iter = 0;
@@ -170,11 +169,13 @@ classdef GPFA
             while iter < maxIter && (iter < 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance)
                 
                 iter = iter + 1;
-
+                
+                [Kb, Kbi, logdetKb] = self.makeKb(gamma);
+            
                 % Perform E step
                 RiC = bsxfun(@rdivide, C, diag(R));
                 CRiC = C' * RiC;
-                VarX = invPerSymm(Kbi + kron(eye(T), CRiC), p);
+                [VarX, logdetM] = invPerSymm(Kbi + kron(eye(T), CRiC), p);
                 RbiCb = kron(eye(T), RiC); % [TODO] can kron be optimized?
                 Rbi = kron(eye(T), diag(1 ./ diag(R)));
                 Cb = kron(eye(T), C);
@@ -186,10 +187,15 @@ classdef GPFA
                 EX = KbCb * CKCRi * YDS;
                 EX = reshape(EX, [p T N]);
 
-                % calculate log-likelihood
-                self.logLike(end + 1) = ...
-                    - N * sum(log(diag(chol(CKCRi)))) ...
-                    - sum(sum(YDS .* (CKCRi * YDS))) / 2;
+                % calculate log-likelihood 
+                % !!!! [TODO: need to adapt to stim terms] !!!
+                YDS = reshape(YDS, q, T * N);
+                val = -T * sum(log(diag(R))) - logdetKb - logdetM - ...
+                    q * T * log(2 * pi);
+                normYDS = bsxfun(@rdivide, YDS, sqrt(diag(R)));
+                CRiYDS = reshape(RiC' * YDS, p * T, []);
+                self.logLike(end + 1) = 0.5 * (N * val - ...
+                    normYDS(:)' * normYDS(:) + sum(sum(CRiYDS .* (VarX * CRiYDS))));
                 
                 % Perform M step
                 T1 = zeros(q, p + T);
@@ -208,7 +214,6 @@ classdef GPFA
                 C = CD(:, 1 : p);
                 D = CD(:, p + (1 : T));
                 
-                YDS = reshape(YDS, q, T * N);
                 R = diag(mean(YDS .^ 2, 2) - ...
                     sum(bsxfun(@times, YDS * reshape(EX, p, T * N)', C), 2) / (T * N));
                 
@@ -243,17 +248,19 @@ classdef GPFA
         end
         
         
-        function [Kb, Kbi] = makeKb(self)
+        function [Kb, Kbi, logdetKb] = makeKb(self, gamma)
             
             T = self.T;
             p = self.p;
             Kb = zeros(T * p, T * p);
             Kbi = zeros(T * p, T * p);
+            logdetKb = 0;
             for i = 1 : p
-                K = toeplitz(self.k(0 : T - 1, self.tau(i)));
+                K = toeplitz(self.k(0 : T - 1, gamma(i)));
                 ndx = i : p : T * p;
                 Kb(ndx, ndx) = K;
-                Kbi(ndx, ndx) = invToeplitz(K);
+                [Kbi(ndx, ndx), logdetK] = invToeplitz(K);
+                logdetKb = logdetKb + logdetK;
             end
         end
         
