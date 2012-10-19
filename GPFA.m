@@ -20,10 +20,10 @@ classdef GPFA
         N           % # trials
         p           % # unobserved factors
         q           % # neurons
+        logLike     % log-likelihood curve during fitting
     end
     
     properties (Access = private)
-        logLike     % log-likelihood curve during fitting
         runtime     % runtime of fitting process
     end
     
@@ -134,12 +134,8 @@ classdef GPFA
             q = self.q;
             T = self.T;
             N = self.N;
-            t = 1 : T;
-            K = self.k(t, t');
-            Ki = inv(K);
-            Kb = kron(K, eye(p));
-            Kbi = kron(Ki, eye(p));
             S = eye(T);
+            [Kb, Kbi] = self.makeKb();
             Yn = reshape(Y, [q T N]);
             
             iter = 0;
@@ -151,18 +147,17 @@ classdef GPFA
                 % Perform E step
                 RiC = bsxfun(@rdivide, C, diag(R));
                 CRiC = C' * RiC;
-                Mi = invPerSymm(Kbi + kron(eye(T), CRiC), p);
+                VarX = invPerSymm(Kbi + kron(eye(T), CRiC), p);
                 RbiCb = kron(eye(T), RiC); % [TODO] can kron be optimized?
                 Rbi = kron(eye(T), diag(1 ./ diag(R)));
                 Cb = kron(eye(T), C);
-                KbCb = Kb * Cb'; % [TODO] optimize: K is diagonal
-                CKCRi = Rbi - RbiCb * Mi * RbiCb';
-                Q = KbCb * CKCRi;
+                KbCb = Kb * Cb'; % [TODO] optimize: K is block-diagonal
+                % KbCb = kron(K, C'); % if all Ks/taus are equal
+                CKCRi = Rbi - RbiCb * VarX * RbiCb';
                 YDS = bsxfun(@minus, Y, D * S);
                 YDS = reshape(YDS, q * T, N);
-                X = Q * YDS;
-                X = reshape(X, [p T N]);
-                XX = Kb - Q * KbCb';
+                EX = KbCb * CKCRi * YDS;
+                EX = reshape(EX, [p T N]);
 
                 % calculate log-likelihood
                 self.logLike(end + 1) = ...
@@ -175,11 +170,11 @@ classdef GPFA
                 for t = 1 : T
                     tt = (1 : p) + p * (t - 1);
                     for n = 1 : N
-                        x = X(:, t, n);
+                        x = EX(:, t, n);
                         s = S(:, t);
                         % [TODO] make more efficient: s mostly zero
                         T1 = T1 + Yn(:, t, n) * [x', s'];
-                        T2 = T2 + [XX(tt, tt) + x * x', x * s'; s * x', s * s'];
+                        T2 = T2 + [VarX(tt, tt) + x * x', x * s'; s * x', s * s'];
                     end
                 end
                 CD = T1 / T2;
@@ -188,7 +183,7 @@ classdef GPFA
                 
                 YDS = reshape(YDS, q, T * N);
                 R = diag(mean(YDS .^ 2, 2) - ...
-                    sum(bsxfun(@times, YDS * reshape(X, p, T * N)', C), 2) / (T * N));
+                    sum(bsxfun(@times, YDS * reshape(EX, p, T * N)', C), 2) / (T * N));
                 
                 if iter == 1
                     logLikeBase = self.logLike(end);
@@ -204,11 +199,26 @@ classdef GPFA
             
             % orthogonalize
             [C, S, V] = svd(C, 'econ');
-            X = reshape(X, p, T * N);
-            X = S * V' * X;
-            X = reshape(X, [p T N]);
+            EX = reshape(EX, p, T * N);
+            EX = S * V' * EX;
+            EX = reshape(EX, [p T N]);
             
-            self = collect(self, Y, C, D, R, X);
+            self = self.collect(Y, C, D, R, EX);
+        end
+        
+        
+        function [Kb, Kbi] = makeKb(self)
+            
+            T = self.T;
+            p = self.p;
+            Kb = zeros(T * p, T * p);
+            Kbi = zeros(T * p, T * p);
+            for i = 1 : p
+                K = toeplitz(self.k(0 : T - 1, self.tau(i)));
+                ndx = i : p : T * p;
+                Kb(ndx, ndx) = K;
+                Kbi(ndx, ndx) = invToeplitz(K);
+            end
         end
         
     end
