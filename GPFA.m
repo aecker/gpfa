@@ -55,7 +55,7 @@ classdef GPFA
         end
         
         
-        function self = fit(self, Y, p)
+        function self = fit(self, Y, p, C, D, R, gamma)
             % Fit the model
             %   self = fit(self, Y, p) fits the model to data Y using p
             %   latent factors.
@@ -74,24 +74,31 @@ classdef GPFA
             % ensure deterministic behavior
             rng(self.params.Seed);
             
-            % initialize stimulus weights using linear regression
-            Y = reshape(Y, q, T * N);
-            S = repmat(eye(T), 1, N);
-            self.D = Y / S;
+            if nargin < 4
+                
+                % average firing rates
+                Y = reshape(Y, q, T * N);
+                self.D = mean(Y, 2);
+                
+                % initialize factor loadings using PCA
+                resid = bsxfun(@minus, Y, self.D);
+                Q = cov(resid');
+                [self.C, Lambda] = eigs(Q, p);
+                
+                % initialize private noise as residual variance not accounted
+                % for by PCA and stimulus
+                self.R = diag(diag(Q - self.C * Lambda * self.C'));
+                
+                % initialize gammas
+                self.gamma = log(0.5 / 100) * ones(p, 1);
+                %self.tau = exp(randn(p, 1));
+            else
+                self.C = C;
+                self.D = D;
+                self.R = R;
+                self.gamma = gamma;
+            end
             
-            % initialize factor loadings using PCA
-            resid = Y - self.D * S;
-            Q = cov(resid');
-            [self.C, Lambda] = eigs(Q, p);
-            
-            % initialize private noise as residual variance not accounted
-            % for by PCA and stimulus
-            self.R = diag(diag(Q - self.C * Lambda * self.C'));
-            
-            % initialize taus to unity
-            %self.tau = ones(p, 1);
-            self.tau = exp(randn(p, 1));
-
             % run EM
             self = self.EM();
         end
