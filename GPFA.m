@@ -77,12 +77,13 @@ classdef GPFA
                 
                 self.Y = Y;
                 
-                % average firing rates
+                % initialize stimulus weights using linear regression
                 Y = reshape(Y, q, T * N);
-                self.D = mean(Y, 2);
+                S = repmat(eye(T), 1, N);
+                self.D = Y / S;
                 
                 % initialize factor loadings using PCA
-                resid = bsxfun(@minus, Y, self.D);
+                resid = Y - self.D * S;
                 Q = cov(resid');
                 [self.C, Lambda] = eigs(Q, p);
                 
