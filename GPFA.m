@@ -235,6 +235,7 @@ classdef GPFA
                     plot(self.logLike, '.-k')
                     subplot(212), hold all
                     plot(C(:, 1), 'k')
+                    drawnow
                 end
             end
             
