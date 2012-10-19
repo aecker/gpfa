@@ -55,7 +55,7 @@ classdef GPFA
         end
         
         
-        function self = fit(self, Y, p, C, D, R, gamma)
+        function self = fit(self, Y, p, C, D, R, tau)
             % Fit the model
             %   self = fit(self, Y, p) fits the model to data Y using p
             %   latent factors.
@@ -68,13 +68,14 @@ classdef GPFA
             self.q = q;
             self.T = T;
             self.N = N;
-            self.Y = Y;
             self.p = p;
             
             % ensure deterministic behavior
             rng(self.params.Seed);
             
             if nargin < 4
+                
+                self.Y = Y;
                 
                 % average firing rates
                 Y = reshape(Y, q, T * N);
@@ -89,14 +90,10 @@ classdef GPFA
                 % for by PCA and stimulus
                 self.R = diag(diag(Q - self.C * Lambda * self.C'));
                 
-                % initialize gammas
-                self.gamma = log(0.5 / 100) * ones(p, 1);
-                %self.tau = exp(randn(p, 1));
+                % initialize taus
+                self.tau = 10 * ones(p, 1);
             else
-                self.C = C;
-                self.D = D;
-                self.R = R;
-                self.gamma = gamma;
+                self = self.collect(Y, C, D, R, tau, []);
             end
             
             % run EM
@@ -170,7 +167,7 @@ classdef GPFA
                 
                 iter = iter + 1;
                 
-                [Kb, Kbi, logdetKb] = self.makeKb(gamma);
+                [Kb, Kbi, logdetKb] = self.makeKb(tau);
             
                 % Perform E step
                 RiC = bsxfun(@rdivide, C, diag(R));
@@ -249,7 +246,7 @@ classdef GPFA
         end
         
         
-        function [Kb, Kbi, logdetKb] = makeKb(self, gamma)
+        function [Kb, Kbi, logdetKb] = makeKb(self, tau)
             
             T = self.T;
             p = self.p;
@@ -257,7 +254,7 @@ classdef GPFA
             Kbi = zeros(T * p, T * p);
             logdetKb = 0;
             for i = 1 : p
-                K = toeplitz(self.k(0 : T - 1, gamma(i)));
+                K = toeplitz(self.k(0 : T - 1, tau(i)));
                 ndx = i : p : T * p;
                 Kb(ndx, ndx) = K;
                 [Kbi(ndx, ndx), logdetK] = invToeplitz(K);
