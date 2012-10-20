@@ -13,6 +13,7 @@ classdef GPFA
         Y           % spike count data
         k           % GP covariance function
         gamma       % GP timescales
+        tau         % GP timescales as SD (unit: bins)
         C           % factor loadings
         D           % stimulus weights
         R           % independent noise variances
@@ -131,11 +132,6 @@ classdef GPFA
                 self.X(i, :) = self.X(i, :) / sd;
                 self.C(:, i) = self.C(:, i) * sd;
             end
-        end
-        
-        
-        function t = tau(self)
-            t = exp(-self.gamma / 2);
         end
         
     end
@@ -276,6 +272,7 @@ classdef GPFA
             end
             
             self = self.collect(Y, C, D, R, gamma, EX);
+            self.tau = exp(-gamma / 2);
         end
         
         
