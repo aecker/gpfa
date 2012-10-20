@@ -21,9 +21,10 @@ for i = 1 : 2
     cla, hold on
     plot(grd.X(i, :), 'k')
     plot(sign(cc(ndx(i), i)) * model.X(ndx(i), :), 'r')
+    axis tight
+    plot(repmat((1 : model.N - 1) * model.T, 2, 1), ylim, 'k')
     ylabel(sprintf('Factor %d', i))
     xlabel('Time')
-    axis tight
     xlim([0 100])
 end
 
