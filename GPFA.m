@@ -329,6 +329,44 @@ classdef GPFA
             gpfa.q = q;
         end
         
+        
+        function [gpfa, Y] = toyExampleOri()
+            % Toy example with up/down states being orientation-domain
+            % specific.
+        
+            N = 100;    % trials
+            T = 20;     % bins (e.g. 50 ms -> 1 sec trials)
+            p = 3;
+            q = 16;
+
+            [b, a] = butter(5, 0.05);
+            theta = cumsum(randn(1, N * T));
+            theta = filtfilt(b, a, theta);
+            ampl = randn(1, N * T);
+            ampl = filtfilt(b, a, ampl);
+            ampl = 2 ./ (1 + exp(3 * ampl));
+            X = [cos(theta); sin(theta); ampl];
+            
+            phi = (0 : q - 1) / q * 2 * pi;
+            C = [cos(phi); sin(phi); ones(1, q)]';
+            C = bsxfun(@rdivide, C, sqrt(sum(C .^ 2, 1)));
+            
+            t = sin((linspace(0, 1, T) .^ (1 / 7)) * 3);
+            D = exp(cos(phi))' * t;
+            
+            R = diag(mean(D, 2));
+            
+            S = repmat(eye(T), 1, N);
+            Y = chol(R)' * randn(q, T * N) + C * X + D * S;
+            Y = reshape(Y, [q T N]);
+            
+            gpfa = GPFA();
+            gpfa = gpfa.collect(Y, C, D, R, [], X);
+            gpfa.T = T;
+            gpfa.N = N;
+            gpfa.p = p;
+            gpfa.q = q;
+        end
     end
     
 end
