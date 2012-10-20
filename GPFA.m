@@ -12,7 +12,7 @@ classdef GPFA
         params      % parameters for fitting
         Y           % spike count data
         k           % GP covariance function
-        tau         % GP timescales
+        gamma       % GP timescales
         C           % factor loadings
         D           % stimulus weights
         R           % independent noise variances
@@ -43,7 +43,7 @@ classdef GPFA
             p.KeepUnmatched = true;
             p.addOptional('SigmaN', 1e-3);
             p.addOptional('Seed', 1);
-            p.addOptional('Tolerance', 0.0005);
+            p.addOptional('Tolerance', 1e-4);
             p.addOptional('Verbose', false);
             p.parse(varargin{:});
             self.params = p.Results;
@@ -51,11 +51,11 @@ classdef GPFA
             % covariance function
             sn = self.params.SigmaN;
             sf = 1 - sn;
-            self.k = @(t, tau) sf * exp(-1/2 * t .^ 2 / tau ^ 2) + sn * (t == 0);
+            self.k = @(t, gamma) sf * exp(-0.5 * exp(gamma) * t .^ 2) + sn * (t == 0);
         end
         
         
-        function self = fit(self, Y, p, C, D, R, tau)
+        function self = fit(self, Y, p, C, D, R, gamma)
             % Fit the model
             %   self = fit(self, Y, p) fits the model to data Y using p
             %   latent factors.
@@ -91,50 +91,88 @@ classdef GPFA
                 % for by PCA and stimulus
                 self.R = diag(diag(Q - self.C * Lambda * self.C'));
                 
-                % initialize taus
-                self.tau = 10 * ones(p, 1);
+                % initialize gammas
+                self.gamma = log(0.01) * ones(p, 1);
             else
-                self = self.collect(Y, C, D, R, tau, []);
+                self = self.collect(Y, C, D, R, gamma, []);
             end
             
             % run EM
             self = self.EM();
         end
+        
+        
+        function self = ortho(self)
+            % Orthogonalize factor loadings
+            
+            [self.C, S, V] = svd(self.C, 'econ');
+            X = reshape(self.X, self.p, self.T * self.N);
+            X = S * V' * X;
+            self.X = reshape(X, [self.p self.T self.N]);
+        end
+        
+        
+        function self = normLoadings(self)
+            % Normalize factor loadings
+            
+            for i = 1 : self.p
+                n = norm(self.C(:, i));
+                self.C(:, i) = self.C(:, i) / n;
+                self.X(i, :) = self.X(i, :) * n;
+            end
+        end
+        
+        
+        function self = normFactors(self)
+            % Normalize factors to unit variance
+            
+            for i = 1 : self.p
+                sd = std(self.X(i, :));
+                self.X(i, :) = self.X(i, :) / sd;
+                self.C(:, i) = self.C(:, i) * sd;
+            end
+        end
+        
+        
+        function t = tau(self)
+            t = exp(-self.gamma / 2);
+        end
+        
     end
     
     
     methods (Access = protected)
         
-        function [Y, C, D, R, tau, X] = expand(self)
+        function [Y, C, D, R, gamma, X] = expand(self)
             Y = self.Y;
             C = self.C;
             D = self.D;
             R = self.R;
-            tau = self.tau;
+            gamma = self.gamma;
             X = self.X;
         end
         
         
-        function self = collect(self, Y, C, D, R, tau, X)
+        function self = collect(self, Y, C, D, R, gamma, X)
             self.Y = Y;
             self.C = C;
             self.D = D;
             self.R = R;
-            self.tau = tau;
+            self.gamma = gamma;
             self.X = X;
         end
         
-        function [E, dEdtau] = Etau(self, tau, EXX)
+        function [E, dEdgamma] = Egamma(self, gamma, EXX)
             % EXX is the sum (over N) of the second moments of X
             
             sigmaf = 1 - self.params.SigmaN;
             N = self.N;
             t = 0 : self.T - 1;
-            [Ki, logdetK] = invToeplitz(self.k(t, tau));
+            [Ki, logdetK] = invToeplitz(self.k(t, gamma));
             ttsq = bsxfun(@minus, t, t') .^ 2;
-            dKdtau = sigmaf ^ 2 * ttsq / tau ^ 3 .* exp(-0.5 * ttsq / tau ^ 2);
+            dKdgamma = -0.5 * sigmaf * exp(gamma) * ttsq .* exp(-0.5 * exp(gamma) * ttsq);
             dEdK = 0.5 * (N * Ki - Ki * EXX * Ki);
-            dEdtau = dEdK(:)' * dKdtau(:);
+            dEdgamma = dEdK(:)' * dKdgamma(:);
             E = 0.5 * (N * logdetK + EXX(:)' * Ki(:));
 %             E = 0.5 * (EXX(:)' * Ki(:));
         end
@@ -152,7 +190,7 @@ classdef GPFA
             %   convergence but at most maxIter iterations.
             
             if nargin < 2, maxIter = Inf; end
-            [Y, C, D, R, tau] = self.expand();
+            [Y, C, D, R, gamma] = self.expand();
             
             % pre-compute GP covariance and inverse
             p = self.p;
@@ -168,7 +206,7 @@ classdef GPFA
                 
                 iter = iter + 1;
                 
-                [Kb, Kbi, logdetKb] = self.makeKb(tau);
+                [Kb, Kbi, logdetKb] = self.makeKb(gamma);
             
                 % Perform E step
                 RiC = bsxfun(@rdivide, C, diag(R));
@@ -180,7 +218,7 @@ classdef GPFA
                 KbCb = Kb * Cb'; % [TODO] optimize: K is block-diagonal
                 % KbCb = kron(K, C'); % if all Ks/taus are equal
                 CKCRi = Rbi - RbiCb * VarX * RbiCb';
-                YDS = bsxfun(@minus, Y, D * S);
+                YDS = bsxfun(@minus, Y, D);
                 YDS = reshape(YDS, q * T, N);
                 EX = KbCb * CKCRi * YDS;
                 EX = reshape(EX, [p T N]);
@@ -215,13 +253,13 @@ classdef GPFA
                 R = diag(mean(YDS .^ 2, 2) - ...
                     sum(bsxfun(@times, YDS * reshape(EX, p, T * N)', C), 2) / (T * N));
                 
-                % maximize tau
+                % maximize gamma
                 for i = 1 : p
                     ndx = i : p : T * p;
                     EXi = permute(EX(i, :, :), [2 3 1]);
                     EXX = N * VarX(ndx, ndx) + (EXi * EXi');
-                    fun = @(tau) self.Etau(tau, EXX);
-                    tau(i) = minimize(tau(i), fun, 50);
+                    fun = @(gamma) self.Egamma(gamma, EXX);
+                    gamma(i) = minimize(gamma(i), fun, -8);
                 end
 
                 if iter == 1
@@ -237,17 +275,11 @@ classdef GPFA
                 end
             end
             
-            % orthogonalize
-            [C, S, V] = svd(C, 'econ');
-            EX = reshape(EX, p, T * N);
-            EX = S * V' * EX;
-            EX = reshape(EX, [p T N]);
-            
-            self = self.collect(Y, C, D, R, tau, EX);
+            self = self.collect(Y, C, D, R, gamma, EX);
         end
         
         
-        function [Kb, Kbi, logdetKb] = makeKb(self, tau)
+        function [Kb, Kbi, logdetKb] = makeKb(self, gamma)
             
             T = self.T;
             p = self.p;
@@ -255,7 +287,7 @@ classdef GPFA
             Kbi = zeros(T * p, T * p);
             logdetKb = 0;
             for i = 1 : p
-                K = toeplitz(self.k(0 : T - 1, tau(i)));
+                K = toeplitz(self.k(0 : T - 1, gamma(i)));
                 ndx = i : p : T * p;
                 Kb(ndx, ndx) = K;
                 [Kbi(ndx, ndx), logdetK] = invToeplitz(K);
@@ -271,32 +303,29 @@ classdef GPFA
         function [gpfa, Y] = toyExample()
             % Create toy example for testing
             
-            rng(1);
             N = 100;
             T = 20;
             p = 2;
             q = 8;
-            tau = [4; 1];
+            gamma = log(1 ./ [4; 1] .^ 2);
 
-            gpfa = GPFA('SigmaN', 0.1);
+            gpfa = GPFA();
             
-            K = toeplitz(gpfa.k(0 : T - 1, tau(1)));
+            K = toeplitz(gpfa.k(0 : T - 1, gamma(1)));
             X1 = chol(K)' * randn(T, N);
-            K = toeplitz(gpfa.k(0 : T - 1, tau(2)));
+            K = toeplitz(gpfa.k(0 : T - 1, gamma(2)));
             X2 = chol(K)' * randn(T, N);
             X = [X1(:), X2(:)]';
-            X = X1(:)';
             
             phi = (0 : q - 1) / q * 2 * pi;
             C = [cos(phi); sin(phi)]' / sqrt(q / 2);
-            C = cos(phi)' / sqrt(q / 2);
             D = rand(q, T);
             S = repmat(eye(T), 1, N);
             R = 0.02 * eye(q);
             Y = chol(R)' * randn(q, T * N) + C * X + D * S;
             Y = reshape(Y, [q T N]);
             
-            gpfa = gpfa.collect(Y, C, D, R, tau, X);
+            gpfa = gpfa.collect(Y, C, D, R, gamma, X);
             gpfa.T = T;
             gpfa.N = N;
             gpfa.p = p;
