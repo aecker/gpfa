@@ -4,7 +4,8 @@
 % create toy example
 rng(1)
 % [grd, Y] = GPFA.toyExample();
-[grd, Y] = GPFA.toyExampleOri();
+% [grd, Y] = GPFA.toyExampleOri('gauss');
+[grd, Y] = GPFA.toyExampleOri('poisson');
 grd = grd.normFactors();
 
 % fit model

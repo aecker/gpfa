@@ -332,9 +332,11 @@ classdef GPFA
         end
         
         
-        function [gpfa, Y] = toyExampleOri()
+        function [gpfa, Y] = toyExampleOri(noise)
             % Toy example with up/down states being orientation-domain
             % specific.
+            
+            if ~nargin, noise = 'gauss'; end
         
             N = 200;    % trials
             T = 20;     % bins (e.g. 50 ms -> 1 sec trials)
@@ -359,7 +361,13 @@ classdef GPFA
             R = diag(mean(D, 2));
             
             S = repmat(eye(T), 1, N);
-            Y = chol(R)' * randn(q, T * N) + C * X + D * S;
+            
+            switch noise
+                case 'gauss'
+                    Y = chol(R)' * randn(q, T * N) + C * X + D * S;
+                case 'poisson'
+                    Y = poissrnd(max(0, C * X + D * S));
+            end
             Y = reshape(Y, [q T N]);
             
             gpfa = GPFA();
