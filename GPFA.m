@@ -336,7 +336,7 @@ classdef GPFA
             % Toy example with up/down states being orientation-domain
             % specific.
         
-            N = 100;    % trials
+            N = 200;    % trials
             T = 20;     % bins (e.g. 50 ms -> 1 sec trials)
             p = 3;
             q = 16;
@@ -346,7 +346,7 @@ classdef GPFA
             theta = filtfilt(b, a, theta);
             ampl = randn(1, N * T);
             ampl = filtfilt(b, a, ampl);
-            ampl = 2 ./ (1 + exp(3 * ampl));
+            ampl = 2 ./ (1 + exp(3 * ampl)) - 1;
             X = [cos(theta); sin(theta); ampl];
             
             phi = (0 : q - 1) / q * 2 * pi;
