@@ -220,7 +220,6 @@ classdef GPFA
                 EX = reshape(EX, [p T N]);
 
                 % calculate log-likelihood 
-                % !!!! [TODO: need to adapt to stim terms] !!!
                 YDS = reshape(YDS, q, T * N);
                 val = -T * sum(log(diag(R))) - logdetKb - logdetM - ...
                     q * T * log(2 * pi);
