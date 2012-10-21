@@ -233,14 +233,16 @@ classdef GPFA
                 T1 = zeros(q, p + T);
                 T2 = zeros(p + T);
                 for t = 1 : T
+                    x = permute(EX(:, t, :), [1 3 2]);
+                    y = permute(Yn(:, t, :), [1 3 2]);
+                    T1(:, 1 : p) = T1(:, 1 : p) + y * x';
+                    T1(:, p + t) = sum(y, 2);
                     tt = (1 : p) + p * (t - 1);
-                    for n = 1 : N
-                        x = EX(:, t, n);
-                        s = S(:, t);
-                        % [TODO] make more efficient: s mostly zero
-                        T1 = T1 + Yn(:, t, n) * [x', s'];
-                        T2 = T2 + [VarX(tt, tt) + x * x', x * s'; s * x', s * s'];
-                    end
+                    sx = sum(x, 2);
+                    T2(1 : p, 1 : p) = T2(1 : p, 1 : p) + N * VarX(tt, tt) + x * x';
+                    T2(1 : p, p + t) = sx;
+                    T2(p + t, 1 : p) = sx';
+                    T2(p + t, p + t) = N;
                 end
                 CD = T1 / T2;
                 C = CD(:, 1 : p);
@@ -255,7 +257,7 @@ classdef GPFA
                     EXi = permute(EX(i, :, :), [2 3 1]);
                     EXX = N * VarX(ndx, ndx) + (EXi * EXi');
                     fun = @(gamma) self.Egamma(gamma, EXX);
-                    gamma(i) = minimize(gamma(i), fun, -8);
+                    gamma(i) = minimize(gamma(i), fun, -5);
                 end
 
                 if iter == 1
