@@ -148,6 +148,8 @@ classdef GPFA
         
         
         function s = struct(self)
+            % Convert to struct.
+            
             state = warning('off', 'MATLAB:structOnObject');
             s = builtin('struct', self);
             warning(state)
