@@ -66,6 +66,17 @@ classdef GPFA
             %
             %   See GPFA for optional parameters to use for fitting.
             
+            % deal with edge case where a cell doesn't spike at all
+            ok = var(Y(1 : end, :), [], 2) > 0;
+            if any(~ok)
+                Y = Y(ok, :, :);
+                if nargin > 3
+                    C = C(ok, :);
+                    D = D(ok, :);
+                    R = R(ok, ok);
+                end
+            end
+            
             % determine dimensionality of the problem
             [q, T, N] = size(Y);
             
@@ -103,6 +114,20 @@ classdef GPFA
             
             % run EM
             self = self.EM();
+            
+            % if we excluded some cells due to above edge case, put it back
+            if any(~ok)
+                self.Y(ok, :) = self.Y(1 : end, :);
+                self.Y(~ok, :) = 0;
+                self.C(ok, :) = self.C;
+                self.C(~ok, :) = 0;
+                self.D(ok, :) = self.D;
+                self.D(~ok, :) = 0;
+                self.R(ok, ok) = self.R;
+                self.R(~ok, :) = 0;
+                self.R(:, ~ok) = 0;
+                self.q = numel(ok);
+            end
         end
         
         
