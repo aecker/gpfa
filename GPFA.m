@@ -48,7 +48,7 @@ classdef GPFA
             end
             
             % parse optional parameters
-            p = inputParser;
+            p = inputParser; %#ok<*PROP>
             p.KeepUnmatched = true;
             p.addOptional('SigmaN', 1e-3);
             p.addOptional('Seed', 1);
@@ -212,7 +212,6 @@ classdef GPFA
             q = self.q;
             T = self.T;
             N = self.N;
-            S = eye(T);
             Yn = reshape(Y, [q T N]);
             
             iter = 0;
