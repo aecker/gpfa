@@ -11,7 +11,6 @@ classdef GPFA
     properties
         params      % parameters for fitting
         Y           % spike count data
-        k           % GP covariance function
         gamma       % GP timescales
         tau         % GP timescales as SD (unit: bins)
         C           % factor loadings
@@ -57,11 +56,6 @@ classdef GPFA
             p.addOptional('Verbose', false);
             p.parse(varargin{:});
             self.params = p.Results;
-
-            % covariance function
-            sn = self.params.SigmaN;
-            sf = 1 - sn;
-            self.k = @(t, gamma) sf * exp(-0.5 * exp(gamma) * t .^ 2) + sn * (t == 0);
         end
         
         
@@ -109,6 +103,15 @@ classdef GPFA
             
             % run EM
             self = self.EM();
+        end
+        
+        
+        function k = covFun(self, t, gamma)
+            % Gaussian process covariance function
+            
+            sn = self.params.SigmaN;
+            sf = 1 - sn;
+            k = sf * exp(-0.5 * exp(gamma) * t .^ 2) + sn * (t == 0);
         end
         
         
@@ -180,7 +183,7 @@ classdef GPFA
             sigmaf = 1 - self.params.SigmaN;
             N = self.N;
             t = 0 : self.T - 1;
-            [Ki, logdetK] = invToeplitz(self.k(t, gamma));
+            [Ki, logdetK] = invToeplitz(self.covFun(t, gamma));
             ttsq = bsxfun(@minus, t, t') .^ 2;
             dKdgamma = -0.5 * sigmaf * exp(gamma) * ttsq .* exp(-0.5 * exp(gamma) * ttsq);
             dEdK = 0.5 * (N * Ki - Ki * EXX * Ki);
@@ -301,7 +304,7 @@ classdef GPFA
             Kbi = zeros(T * p, T * p);
             logdetKb = 0;
             for i = 1 : p
-                K = toeplitz(self.k(0 : T - 1, gamma(i)));
+                K = toeplitz(self.covFun(0 : T - 1, gamma(i)));
                 ndx = i : p : T * p;
                 Kb(ndx, ndx) = K;
                 [Kbi(ndx, ndx), logdetK] = invToeplitz(K);
@@ -325,9 +328,9 @@ classdef GPFA
 
             gpfa = GPFA();
             
-            K = toeplitz(gpfa.k(0 : T - 1, gamma(1)));
+            K = toeplitz(gpfa.covFun(0 : T - 1, gamma(1)));
             X1 = chol(K)' * randn(T, N);
-            K = toeplitz(gpfa.k(0 : T - 1, gamma(2)));
+            K = toeplitz(gpfa.covFun(0 : T - 1, gamma(2)));
             X2 = chol(K)' * randn(T, N);
             X = [X1(:), X2(:)]';
             
