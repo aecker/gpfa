@@ -4,4 +4,5 @@ function startup()
 
 folder = fileparts(mfilename('fullpath'));
 addpath(folder)
-addpath(fullfile(folder, 'invToeplitz'));
+addpath(fullfile(folder, 'lib'));
+addpath(fullfile(folder, 'lib/invToeplitz'));
