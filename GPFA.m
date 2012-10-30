@@ -39,6 +39,15 @@ classdef GPFA
             %
             %   TODO
             
+            % initialize from struct?
+            if nargin && isstruct(varargin{1})
+                s = varargin{1};
+                for f = fieldnames(s)'
+                    self.(f{1}) = s.(f{1});
+                end
+                return
+            end
+            
             % parse optional parameters
             p = inputParser;
             p.KeepUnmatched = true;
@@ -132,6 +141,13 @@ classdef GPFA
                 self.X(i, :) = self.X(i, :) / sd;
                 self.C(:, i) = self.C(:, i) * sd;
             end
+        end
+        
+        
+        function s = struct(self)
+            state = warning('off', 'MATLAB:structOnObject');
+            s = builtin('struct', self);
+            warning(state)
         end
         
     end
