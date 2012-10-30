@@ -189,7 +189,6 @@ classdef GPFA
             dEdK = 0.5 * (N * Ki - Ki * EXX * Ki);
             dEdgamma = dEdK(:)' * dKdgamma(:);
             E = 0.5 * (N * logdetK + EXX(:)' * Ki(:));
-%             E = 0.5 * (EXX(:)' * Ki(:));
         end
 
     end
@@ -212,7 +211,6 @@ classdef GPFA
             q = self.q;
             T = self.T;
             N = self.N;
-            S = eye(T);
             Yn = reshape(Y, [q T N]);
             
             iter = 0;
