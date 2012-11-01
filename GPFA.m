@@ -67,7 +67,7 @@ classdef GPFA
             %   See GPFA for optional parameters to use for fitting.
             
             % deal with edge case where a cell doesn't spike at all
-            ok = var(Y(1 : end, :), [], 2) > 0;
+            ok = var(Y(1 : end, :), [], 2) > 1e-10;
             if any(~ok)
                 Y = Y(ok, :, :);
                 if nargin > 3
