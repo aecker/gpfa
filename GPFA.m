@@ -232,8 +232,6 @@ classdef GPFA
             
             if nargin < 2, maxIter = Inf; end
             [Y, C, D, R, gamma] = self.expand();
-            
-            % pre-compute GP covariance and inverse
             p = self.p;
             q = self.q;
             T = self.T;
@@ -246,6 +244,7 @@ classdef GPFA
                 
                 iter = iter + 1;
                 
+                % compute GP covariance and its inverse
                 [Kb, Kbi, logdetKb] = self.makeKb(gamma);
             
                 % Perform E step
