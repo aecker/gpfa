@@ -66,6 +66,8 @@ classdef GPFA
             %
             %   See GPFA for optional parameters to use for fitting.
             
+            self.runtime = now();
+            
             % deal with edge case where a cell doesn't spike at all
             ok = var(Y(1 : end, :), [], 2) > 1e-10;
             if any(~ok)
@@ -128,6 +130,8 @@ classdef GPFA
                 self.R(:, ~ok) = 0;
                 self.q = numel(ok);
             end
+            
+            self.runtime = (now() - self.runtime) * 24 * 3600 * 1000; % ms
         end
         
         
