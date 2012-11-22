@@ -256,7 +256,7 @@ classdef GPFA
             
             iter = 0;
             logLikeBase = NaN;
-            while iter < maxIter && (iter < 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance)
+            while iter < maxIter && (iter <= 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance)
                 
                 iter = iter + 1;
                 
@@ -325,13 +325,13 @@ classdef GPFA
                     gamma(i) = minimize(gamma(i), fun, -5);
                 end
 
-                if iter == 1
+                if iter == 2
                     logLikeBase = self.logLike(end);
                 end
                 
                 if self.params.Verbose
                     subplot(211)
-                    plot(self.logLike, '.-k')
+                    plot(self.logLike(2 : end), '.-k')
                     subplot(212), hold all
                     plot(C(:, 1), 'k')
                     drawnow
