@@ -322,7 +322,7 @@ classdef GPFA
                     EXi = permute(EX(i, :, :), [2 3 1]);
                     EXX = N * VarX(ndx, ndx) + (EXi * EXi');
                     fun = @(gamma) self.Egamma(gamma, EXX);
-                    gamma(i) = minimize(gamma(i), fun, -5);
+                    gamma(i) = minimize(gamma(i), fun, -10);
                 end
 
                 if iter == 2
