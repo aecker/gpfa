@@ -84,7 +84,8 @@ classdef GPFA
             
             % determine dimensionality of the problem
             [q, T, N] = size(Y);
-            M = size(S, 1);
+            [M, Tc] = size(S);
+            assert(T == Tc, 'The number of columns in S and Y must be the same!')
             
             self.q = q;
             self.T = T;
