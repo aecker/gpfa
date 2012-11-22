@@ -96,29 +96,25 @@ classdef GPFA
             rng(self.params.Seed);
             
             if nargin < 5
-                
-                self.Y = Y;
-                self.S = S;
-                
                 % initialize stimulus weights using linear regression
                 Y = reshape(Y, q, T * N);
                 Sn = repmat(S, 1, N);
-                self.D = Y / Sn;
+                D = Y / Sn;
                 
                 % initialize factor loadings using PCA
-                resid = Y - self.D * Sn;
+                resid = Y - D * Sn;
                 Q = cov(resid');
-                [self.C, Lambda] = eigs(Q, p);
+                [C, Lambda] = eigs(Q, p);
                 
                 % initialize private noise as residual variance not accounted
                 % for by PCA and stimulus
-                self.R = diag(diag(Q - self.C * Lambda * self.C'));
+                R = diag(diag(Q - C * Lambda * C'));
                 
                 % initialize gammas
-                self.gamma = log(0.01) * ones(p, 1);
-            else
-                self = self.collect(Y, S, C, D, R, gamma, []);
+                gamma = log(0.01) * ones(p, 1);
             end
+            
+            self = self.collect(Y, S, C, D, R, gamma, []);
             
             % run EM
             self = self.EM();
