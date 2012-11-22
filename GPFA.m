@@ -11,6 +11,7 @@ classdef GPFA
     properties
         params      % parameters for fitting
         Y           % spike count data
+        S           % basis functions for PSTH
         gamma       % GP timescales
         tau         % GP timescales as SD (unit: bins)
         C           % factor loadings
@@ -19,6 +20,7 @@ classdef GPFA
         X           % latent factors (GP)
         T           % # time points per trial
         N           % # trials
+        M           % # basis functions for PSTH
         p           % # unobserved factors
         q           % # neurons
         logLike     % log-likelihood curve during fitting
@@ -59,9 +61,10 @@ classdef GPFA
         end
         
         
-        function self = fit(self, Y, p, C, D, R, gamma)
+        function self = fit(self, Y, S, p, C, D, R, gamma)
             % Fit the model
-            %   self = fit(self, Y, p) fits the model to data Y using p
+            %   self = fit(self, Y, S, p) fits the model to data Y using S
+            %   as basis functions for predicting the PSTHs and using p
             %   latent factors.
             %
             %   See GPFA for optional parameters to use for fitting.
@@ -81,26 +84,29 @@ classdef GPFA
             
             % determine dimensionality of the problem
             [q, T, N] = size(Y);
+            M = size(S, 1);
             
             self.q = q;
             self.T = T;
             self.N = N;
+            self.M = M;
             self.p = p;
             
             % ensure deterministic behavior
             rng(self.params.Seed);
             
-            if nargin < 4
+            if nargin < 5
                 
                 self.Y = Y;
+                self.S = S;
                 
                 % initialize stimulus weights using linear regression
                 Y = reshape(Y, q, T * N);
-                S = repmat(eye(T), 1, N);
-                self.D = Y / S;
+                Sn = repmat(S, 1, N);
+                self.D = Y / Sn;
                 
                 % initialize factor loadings using PCA
-                resid = Y - self.D * S;
+                resid = Y - self.D * Sn;
                 Q = cov(resid');
                 [self.C, Lambda] = eigs(Q, p);
                 
@@ -111,7 +117,7 @@ classdef GPFA
                 % initialize gammas
                 self.gamma = log(0.01) * ones(p, 1);
             else
-                self = self.collect(Y, C, D, R, gamma, []);
+                self = self.collect(Y, S, C, D, R, gamma, []);
             end
             
             % run EM
@@ -189,8 +195,9 @@ classdef GPFA
     
     methods (Access = protected)
         
-        function [Y, C, D, R, gamma, X] = expand(self)
+        function [Y, S, C, D, R, gamma, X] = expand(self)
             Y = self.Y;
+            S = self.S;
             C = self.C;
             D = self.D;
             R = self.R;
@@ -199,8 +206,9 @@ classdef GPFA
         end
         
         
-        function self = collect(self, Y, C, D, R, gamma, X)
+        function self = collect(self, Y, S, C, D, R, gamma, X)
             self.Y = Y;
+            self.S = S;
             self.C = C;
             self.D = D;
             self.R = R;
@@ -235,12 +243,13 @@ classdef GPFA
             %   convergence but at most maxIter iterations.
             
             if nargin < 2, maxIter = Inf; end
-            [Y, C, D, R, gamma] = self.expand();
+            [Y, S, C, D, R, gamma] = self.expand();
             p = self.p;
             q = self.q;
             T = self.T;
             N = self.N;
-            Yn = reshape(Y, [q T N]);
+            M = self.M;
+            Sn = repmat(S, [1 1 N]);
             
             iter = 0;
             logLikeBase = NaN;
@@ -261,41 +270,48 @@ classdef GPFA
                 KbCb = Kb * Cb'; % [TODO] optimize: K is block-diagonal
                 % KbCb = kron(K, C'); % if all Ks/taus are equal
                 CKCRi = Rbi - RbiCb * VarX * RbiCb';
-                YDS = bsxfun(@minus, Y, D);
-                YDS = reshape(YDS, q * T, N);
-                EX = KbCb * CKCRi * YDS;
+                if M > 0
+                    Yres = bsxfun(@minus, Y, D * S);
+                else
+                    Yres = Y;
+                end
+                Yres = reshape(Yres, q * T, N);
+                EX = KbCb * CKCRi * Yres;
                 EX = reshape(EX, [p T N]);
 
                 % calculate log-likelihood 
-                YDS = reshape(YDS, q, T * N);
+                Yres = reshape(Yres, q, T * N);
                 val = -T * sum(log(diag(R))) - logdetKb - logdetM - ...
                     q * T * log(2 * pi);
-                normYDS = bsxfun(@rdivide, YDS, sqrt(diag(R)));
-                CRiYDS = reshape(RiC' * YDS, p * T, []);
+                normYres = bsxfun(@rdivide, Yres, sqrt(diag(R)));
+                CRiYres = reshape(RiC' * Yres, p * T, N);
                 self.logLike(end + 1) = 0.5 * (N * val - ...
-                    normYDS(:)' * normYDS(:) + sum(sum(CRiYDS .* (VarX * CRiYDS))));
+                    normYres(:)' * normYres(:) + sum(sum(CRiYres .* (VarX * CRiYres))));
                 
                 % Perform M step
-                T1 = zeros(q, p + T);
-                T2 = zeros(p + T);
+                T1 = zeros(q, p + M);
+                T2 = zeros(p + M);
                 for t = 1 : T
                     x = permute(EX(:, t, :), [1 3 2]);
-                    y = permute(Yn(:, t, :), [1 3 2]);
+                    y = permute(Y(:, t, :), [1 3 2]);
                     T1(:, 1 : p) = T1(:, 1 : p) + y * x';
-                    T1(:, p + t) = sum(y, 2);
                     tt = (1 : p) + p * (t - 1);
-                    sx = sum(x, 2);
                     T2(1 : p, 1 : p) = T2(1 : p, 1 : p) + N * VarX(tt, tt) + x * x';
-                    T2(1 : p, p + t) = sx;
-                    T2(p + t, 1 : p) = sx';
-                    T2(p + t, p + t) = N;
+                    if M > 0
+                        s = permute(Sn(:, t, :), [1 3 2]);
+                        sx = x * s';
+                        T1(:, p + (1 : M)) = T1(:, p + (1 : M)) + y * s';
+                        T2(1 : p, p + (1 : M)) = T2(1 : p, p + (1 : M)) + sx;
+                        T2(p + (1 : M), 1 : p) = T2(p + (1 : M), 1 : p) + sx';
+                        T2(p + (1 : M), p + (1 : M)) = T2(p + (1 : M), p + (1 : M)) + s * s';
+                    end
                 end
                 CD = T1 / T2;
                 C = CD(:, 1 : p);
-                D = CD(:, p + (1 : T));
+                D = CD(:, p + (1 : M));
                 
-                R = diag(mean(YDS .^ 2, 2) - ...
-                    sum(bsxfun(@times, YDS * reshape(EX, p, T * N)', C), 2) / (T * N));
+                R = diag(mean(Yres .^ 2, 2) - ...
+                    sum(bsxfun(@times, Yres * reshape(EX, p, T * N)', C), 2) / (T * N));
                 
                 % maximize gamma
                 for i = 1 : p
@@ -319,7 +335,7 @@ classdef GPFA
                 end
             end
             
-            self = self.collect(Y, C, D, R, gamma, EX);
+            self = self.collect(Y, S, C, D, R, gamma, EX);
             self.tau = exp(-gamma / 2);
         end
         
@@ -345,7 +361,7 @@ classdef GPFA
     
     methods (Static)
         
-        function [gpfa, Y] = toyExample()
+        function [gpfa, Y, S] = toyExample()
             % Create toy example for testing
             
             N = 100;
@@ -365,12 +381,13 @@ classdef GPFA
             phi = (0 : q - 1) / q * 2 * pi;
             C = [cos(phi); sin(phi)]' / sqrt(q / 2);
             D = rand(q, T);
-            S = repmat(eye(T), 1, N);
+            S = eye(T);
+            Sn = repmat(S, 1, N);
             R = 0.02 * eye(q);
-            Y = chol(R)' * randn(q, T * N) + C * X + D * S;
+            Y = chol(R)' * randn(q, T * N) + C * X + D * Sn;
             Y = reshape(Y, [q T N]);
             
-            gpfa = gpfa.collect(Y, C, D, R, gamma, X);
+            gpfa = gpfa.collect(Y, S, C, D, R, gamma, X);
             gpfa.T = T;
             gpfa.N = N;
             gpfa.p = p;
@@ -378,7 +395,7 @@ classdef GPFA
         end
         
         
-        function [gpfa, Y] = toyExampleOri(noise)
+        function [gpfa, Y, S] = toyExampleOri(noise)
             % Toy example with up/down states being orientation-domain
             % specific.
             
@@ -406,18 +423,19 @@ classdef GPFA
             
             R = diag(mean(D, 2));
             
-            S = repmat(eye(T), 1, N);
+            S = eye(T);
+            Sn = repmat(S, 1, N);
             
             switch noise
                 case 'gauss'
-                    Y = chol(R)' * randn(q, T * N) + C * X + D * S;
+                    Y = chol(R)' * randn(q, T * N) + C * X + D * Sn;
                 case 'poisson'
-                    Y = poissrnd(max(0, C * X + D * S));
+                    Y = poissrnd(max(0, C * X + D * Sn));
             end
             Y = reshape(Y, [q T N]);
             
             gpfa = GPFA();
-            gpfa = gpfa.collect(Y, C, D, R, [], X);
+            gpfa = gpfa.collect(Y, S, C, D, R, [], X);
             gpfa.T = T;
             gpfa.N = N;
             gpfa.p = p;
