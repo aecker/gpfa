@@ -144,6 +144,49 @@ classdef GPFA
         end
         
         
+        function [EX, VarX, logLike] = estX(self, Y)
+            % Estimate latent factors (and log-likelihood).
+            %   [EX, VarX, logLike] = self.estX(Y)
+            
+            T = self.T; M = self.M; q = self.q; p = self.p;
+            S = self.S; C = self.C; D = self.D; R = self.R;
+            N = size(Y, 3);
+            
+            % compute GP covariance and its inverse
+            [Kb, Kbi, logdetKb] = self.makeKb();
+            
+            % Perform E step
+            RiC = bsxfun(@rdivide, C, diag(R));
+            CRiC = C' * RiC;
+            [VarX, logdetM] = invPerSymm(Kbi + kron(eye(T), CRiC), p);
+            RbiCb = kron(eye(T), RiC); % [TODO] can kron be optimized?
+            Rbi = kron(eye(T), diag(1 ./ diag(R)));
+            Cb = kron(eye(T), C);
+            KbCb = Kb * Cb'; % [TODO] optimize: K is block-diagonal
+            % KbCb = kron(K, C'); % if all Ks/taus are equal
+            CKCRi = Rbi - RbiCb * VarX * RbiCb';
+            if M > 0
+                Yres = bsxfun(@minus, Y, D * S);
+            else
+                Yres = Y;
+            end
+            Yres = reshape(Yres, q * T, N);
+            EX = KbCb * CKCRi * Yres;
+            EX = reshape(EX, [p T N]);
+            
+            % calculate log-likelihood
+            if nargout > 2
+                Yres = reshape(Yres, q, T * N);
+                val = -T * sum(log(diag(R))) - logdetKb - logdetM - ...
+                    q * T * log(2 * pi);
+                normYres = bsxfun(@rdivide, Yres, sqrt(diag(R)));
+                CRiYres = reshape(RiC' * Yres, p * T, N);
+                logLike = 0.5 * (N * val - normYres(:)' * normYres(:) + ...
+                    sum(sum(CRiYres .* (VarX * CRiYres))));
+            end
+        end
+        
+        
         function k = covFun(self, t, gamma)
             % Gaussian process covariance function
             
@@ -198,17 +241,6 @@ classdef GPFA
     
     methods (Access = protected)
         
-        function [Y, S, C, D, R, gamma, X] = expand(self)
-            Y = self.Y;
-            S = self.S;
-            C = self.C;
-            D = self.D;
-            R = self.R;
-            gamma = self.gamma;
-            X = self.X;
-        end
-        
-        
         function self = collect(self, Y, S, C, D, R, gamma, X)
             self.Y = Y;
             self.S = S;
@@ -246,12 +278,8 @@ classdef GPFA
             %   convergence but at most maxIter iterations.
             
             if nargin < 2, maxIter = Inf; end
-            [Y, S, C, D, R, gamma] = self.expand();
-            p = self.p;
-            q = self.q;
-            T = self.T;
-            N = self.N;
-            M = self.M;
+            Y = self.Y; S = self.S; p = self.p; q = self.q;
+            T = self.T; N = self.N; M = self.M;
             Sn = repmat(S, [1 1 N]);
             
             iter = 0;
@@ -260,36 +288,8 @@ classdef GPFA
                 
                 iter = iter + 1;
                 
-                % compute GP covariance and its inverse
-                [Kb, Kbi, logdetKb] = self.makeKb(gamma);
-            
-                % Perform E step
-                RiC = bsxfun(@rdivide, C, diag(R));
-                CRiC = C' * RiC;
-                [VarX, logdetM] = invPerSymm(Kbi + kron(eye(T), CRiC), p);
-                RbiCb = kron(eye(T), RiC); % [TODO] can kron be optimized?
-                Rbi = kron(eye(T), diag(1 ./ diag(R)));
-                Cb = kron(eye(T), C);
-                KbCb = Kb * Cb'; % [TODO] optimize: K is block-diagonal
-                % KbCb = kron(K, C'); % if all Ks/taus are equal
-                CKCRi = Rbi - RbiCb * VarX * RbiCb';
-                if M > 0
-                    Yres = bsxfun(@minus, Y, D * S);
-                else
-                    Yres = Y;
-                end
-                Yres = reshape(Yres, q * T, N);
-                EX = KbCb * CKCRi * Yres;
-                EX = reshape(EX, [p T N]);
-
-                % calculate log-likelihood 
-                Yres = reshape(Yres, q, T * N);
-                val = -T * sum(log(diag(R))) - logdetKb - logdetM - ...
-                    q * T * log(2 * pi);
-                normYres = bsxfun(@rdivide, Yres, sqrt(diag(R)));
-                CRiYres = reshape(RiC' * Yres, p * T, N);
-                self.logLike(end + 1) = 0.5 * (N * val - ...
-                    normYres(:)' * normYres(:) + sum(sum(CRiYres .* (VarX * CRiYres))));
+                % E step
+                [EX, VarX, self.logLike(end + 1)] = estX(self, Y);
                 
                 % Perform M step
                 T1 = zeros(q, p + M);
@@ -310,20 +310,22 @@ classdef GPFA
                     end
                 end
                 CD = T1 / T2;
-                C = CD(:, 1 : p);
-                D = CD(:, p + (1 : M));
+                self.C = CD(:, 1 : p);
+                self.D = CD(:, p + (1 : M));
                 
-                R = diag(mean(Yres .^ 2, 2) - ...
-                    sum(bsxfun(@times, Yres * reshape(EX, p, T * N)', C), 2) / (T * N));
+                self.R = diag(mean(Yres .^ 2, 2) - ...
+                    sum(bsxfun(@times, Yres * reshape(EX, p, T * N)', self.C), 2) / (T * N));
                 
-                % maximize gamma
+                % optimize gamma
+                self.gamma = zeros(p, 1);
                 for i = 1 : p
                     ndx = i : p : T * p;
                     EXi = permute(EX(i, :, :), [2 3 1]);
                     EXX = N * VarX(ndx, ndx) + (EXi * EXi');
                     fun = @(gamma) self.Egamma(gamma, EXX);
-                    gamma(i) = minimize(gamma(i), fun, -10);
+                    self.gamma(i) = minimize(self.gamma(i), fun, -10);
                 end
+                self.tau = exp(-self.gamma / 2);
 
                 if iter == 2
                     logLikeBase = self.logLike(end);
@@ -333,17 +335,14 @@ classdef GPFA
                     subplot(211)
                     plot(self.logLike(2 : end), '.-k')
                     subplot(212), hold all
-                    plot(C(:, 1), 'k')
+                    plot(self.C(:, 1), 'k')
                     drawnow
                 end
             end
-            
-            self = self.collect(Y, S, C, D, R, gamma, EX);
-            self.tau = exp(-gamma / 2);
         end
         
         
-        function [Kb, Kbi, logdetKb] = makeKb(self, gamma)
+        function [Kb, Kbi, logdetKb] = makeKb(self)
             
             T = self.T;
             p = self.p;
@@ -351,7 +350,7 @@ classdef GPFA
             Kbi = zeros(T * p, T * p);
             logdetKb = 0;
             for i = 1 : p
-                K = toeplitz(self.covFun(0 : T - 1, gamma(i)));
+                K = toeplitz(self.covFun(0 : T - 1, self.gamma(i)));
                 ndx = i : p : T * p;
                 Kb(ndx, ndx) = K;
                 [Kbi(ndx, ndx), logdetK] = invToeplitz(K);
