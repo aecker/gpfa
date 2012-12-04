@@ -75,7 +75,7 @@ classdef GPFA
             ok = var(Y(1 : end, :), [], 2) > 1e-10;
             if any(~ok)
                 Y = Y(ok, :, :);
-                if nargin > 3
+                if nargin > 4
                     C = C(ok, :);
                     D = D(ok, :);
                     R = R(ok, ok);
