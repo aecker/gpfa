@@ -84,8 +84,12 @@ classdef GPFA
             
             % determine dimensionality of the problem
             [q, T, N] = size(Y);
-            [M, Tc] = size(S);
-            assert(T == Tc, 'The number of columns in S and Y must be the same!')
+            if isempty(S)
+                M = 0;
+            else
+                [M, Tc] = size(S);
+                assert(T == Tc, 'The number of columns in S and Y must be the same!')
+            end
             
             self.q = q;
             self.T = T;
@@ -313,6 +317,12 @@ classdef GPFA
                 self.C = CD(:, 1 : p);
                 self.D = CD(:, p + (1 : M));
                 
+                if M > 0
+                    Yres = bsxfun(@minus, Y, self.D * S);
+                else
+                    Yres = Y;
+                end
+                Yres = reshape(Yres, q, T * N);
                 self.R = diag(mean(Yres .^ 2, 2) - ...
                     sum(bsxfun(@times, Yres * reshape(EX, p, T * N)', self.C), 2) / (T * N));
                 
