@@ -90,6 +90,7 @@ classdef GPFA
                 [M, Tc] = size(S);
                 assert(T == Tc, 'The number of columns in S and Y must be the same!')
             end
+            assert(q > p, 'Number of latent factors must be smaller than number of neurons.')
             
             self.q = q;
             self.T = T;
