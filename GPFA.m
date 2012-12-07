@@ -71,16 +71,9 @@ classdef GPFA
             
             self.runtime = now();
             
-            % deal with edge case where a cell doesn't spike at all
+            % make sure there are no non-spiking cells
             ok = var(Y(1 : end, :), [], 2) > 1e-10;
-            if any(~ok)
-                Y = Y(ok, :, :);
-                if nargin > 4
-                    C = C(ok, :);
-                    D = D(ok, :);
-                    R = R(ok, ok);
-                end
-            end
+            assert(all(ok), 'Non-spiking cell found! Please exclude beforehand.')
             
             % determine dimensionality of the problem
             [q, T, N] = size(Y);
@@ -130,21 +123,6 @@ classdef GPFA
             
             % run EM
             self = self.EM();
-            
-            % if we excluded some cells due to above edge case, put it back
-            if any(~ok)
-                self.Y(ok, :) = self.Y(1 : end, :);
-                self.Y(~ok, :) = 0;
-                self.C(ok, :) = self.C;
-                self.C(~ok, :) = 0;
-                self.D(ok, :) = self.D;
-                self.D(~ok, :) = 0;
-                self.R(ok, ok) = self.R;
-                self.R(~ok, :) = 0;
-                self.R(:, ~ok) = 0;
-                self.q = numel(ok);
-            end
-            
             self.runtime = (now() - self.runtime) * 24 * 3600 * 1000; % ms
         end
         
