@@ -10,16 +10,13 @@ classdef GPFA
     
     properties
         params      % parameters for fitting
-        Y           % spike count data
         S           % basis functions for PSTH
         gamma       % GP timescales
         tau         % GP timescales as SD (unit: bins)
         C           % factor loadings
         D           % stimulus weights
         R           % independent noise variances
-        X           % latent factors (GP)
         T           % # time points per trial
-        N           % # trials
         M           % # basis functions for PSTH
         p           % # unobserved factors
         q           % # neurons
@@ -61,11 +58,13 @@ classdef GPFA
         end
         
         
-        function self = fit(self, Y, S, p, C, D, R, gamma)
+        function self = fit(self, Y, p, S, C, D, R, gamma)
             % Fit the model
-            %   self = fit(self, Y, S, p) fits the model to data Y using S
-            %   as basis functions for predicting the PSTHs and using p
+            %   self = fit(self, Y, p) fits the model to data Y using p
             %   latent factors.
+            %
+            %   self = fit(self, Y, p, S) additionally uses S as basis
+            %   functions for predicting the PSTHs.
             %
             %   See GPFA for optional parameters to use for fitting.
             
@@ -77,8 +76,9 @@ classdef GPFA
             
             % determine dimensionality of the problem
             [q, T, N] = size(Y);
-            if isempty(S)
+            if nargin < 4 || isempty(S)
                 M = 0;
+                S = [];
             else
                 [M, Tc] = size(S);
                 assert(T == Tc, 'The number of columns in S and Y must be the same!')
@@ -87,7 +87,6 @@ classdef GPFA
             
             self.q = q;
             self.T = T;
-            self.N = N;
             self.M = M;
             self.p = p;
             
@@ -119,10 +118,10 @@ classdef GPFA
                 gamma = log(0.01) * ones(p, 1);
             end
             
-            self = self.collect(Y, S, C, D, R, gamma, []);
+            self = self.collect(C, R, gamma, S, D);
             
             % run EM
-            self = self.EM();
+            self = self.EM(Y);
             self.runtime = (now() - self.runtime) * 24 * 3600 * 1000; % ms
         end
         
@@ -136,7 +135,16 @@ classdef GPFA
             N = size(Y, 3);
             
             % compute GP covariance and its inverse
-            [Kb, Kbi, logdetKb] = self.makeKb();
+            Kb = zeros(T * p, T * p);
+            Kbi = zeros(T * p, T * p);
+            logdetKb = 0;
+            for i = 1 : p
+                K = toeplitz(self.covFun(0 : T - 1, self.gamma(i)));
+                ndx = i : p : T * p;
+                Kb(ndx, ndx) = K;
+                [Kbi(ndx, ndx), logdetK] = invToeplitz(K);
+                logdetKb = logdetKb + logdetK;
+            end
             
             % Perform E step
             RiC = bsxfun(@rdivide, C, diag(R));
@@ -170,6 +178,17 @@ classdef GPFA
         end
         
         
+        function [Yres, X] = resid(self, Y)
+            % Compute residuals after accounting for internal factors.
+            
+            Yres = zeros(size(Y));
+            N = size(Y, 3);
+            X = self.estX(Y);
+            for i = 1 : N
+                Yres(:, :, i) = Y(:, :, i) - self.C * X(:, :, i);
+            end
+        end
+        
         function k = covFun(self, t, gamma)
             % Gaussian process covariance function
             
@@ -179,34 +198,50 @@ classdef GPFA
         end
         
         
-        function self = ortho(self)
+        function [self, X] = ortho(self, X)
             % Orthogonalize factor loadings
             
             [self.C, S, V] = svd(self.C, 'econ');
-            X = reshape(self.X, self.p, self.T * self.N);
-            X = S * V' * X;
-            self.X = reshape(X, [self.p self.T self.N]);
-        end
-        
-        
-        function self = normLoadings(self)
-            % Normalize factor loadings
-            
-            for i = 1 : self.p
-                n = norm(self.C(:, i));
-                self.C(:, i) = self.C(:, i) / n;
-                self.X(i, :) = self.X(i, :) * n;
+            if nargout > 1
+                if size(X, 1) == self.q  % Y passed -> estimte X
+                    X = self.estX(X);
+                end
+                N = size(Y, 3);
+                X = reshape(X, self.p, self.T * N);
+                X = S * V' * X;
+                X = reshape(X, [self.p self.T N]);
             end
         end
         
         
-        function self = normFactors(self)
+        function [self, X] = normLoadings(self, X)
+            % Normalize factor loadings
+            
+            n = sqrt(sum(self.C .^ 2, 1));
+            self.C = bsxfun(@rdivide, self.C, n);
+            if nargout > 1
+                if size(X, 1) == self.q  % Y passed -> estimte X
+                    X = self.estX(X);
+                end
+                for i = 1 : self.p
+                    X(i, :) = X(i, :) * n(i);
+                end
+            end
+        end
+        
+        
+        function [self, X] = normFactors(self, X)
             % Normalize factors to unit variance
             
+            if size(X, 1) == self.q  % Y passed -> estimte X
+                X = self.estX(X);
+            end
             for i = 1 : self.p
-                sd = std(self.X(i, :));
-                self.X(i, :) = self.X(i, :) / sd;
+                sd = std(X(i, :));
                 self.C(:, i) = self.C(:, i) * sd;
+                if nargout > 1
+                    X(i, :) = X(i, :) / sd;
+                end
             end
         end
         
@@ -224,28 +259,27 @@ classdef GPFA
     
     methods (Access = protected)
         
-        function self = collect(self, Y, S, C, D, R, gamma, X)
-            self.Y = Y;
-            self.S = S;
+        function self = collect(self, C, R, gamma, S, D)
             self.C = C;
-            self.D = D;
             self.R = R;
             self.gamma = gamma;
-            self.X = X;
+            if nargin > 4
+                self.S = S;
+                self.D = D;
+            end    
         end
         
         function [E, dEdgamma] = Egamma(self, gamma, EXX)
-            % EXX is the sum (over N) of the second moments of X
+            % EXX is the average (over N) of the second moments of X
             
             sigmaf = 1 - self.params.SigmaN;
-            N = self.N;
             t = 0 : self.T - 1;
             [Ki, logdetK] = invToeplitz(self.covFun(t, gamma));
             ttsq = bsxfun(@minus, t, t') .^ 2;
             dKdgamma = -0.5 * sigmaf * exp(gamma) * ttsq .* exp(-0.5 * exp(gamma) * ttsq);
-            dEdK = 0.5 * (N * Ki - Ki * EXX * Ki);
+            dEdK = 0.5 * (Ki - Ki * EXX * Ki);
             dEdgamma = dEdK(:)' * dKdgamma(:);
-            E = 0.5 * (N * logdetK + EXX(:)' * Ki(:));
+            E = 0.5 * (logdetK + EXX(:)' * Ki(:));
         end
 
     end
@@ -253,21 +287,17 @@ classdef GPFA
     
     methods (Access = private)
         
-        function self = EM(self, maxIter)
+        function self = EM(self, Y)
             % Run EM.
-            %   self = EM(self) runs the EM iteration until convergence.
-            %
-            %   self = EM(self, maxIter) runs the EM iteration until
-            %   convergence but at most maxIter iterations.
+            %   self = self.EM(Y) runs the EM iteration until convergence.
             
-            if nargin < 2, maxIter = Inf; end
-            Y = self.Y; S = self.S; p = self.p; q = self.q;
-            T = self.T; N = self.N; M = self.M;
+            S = self.S; p = self.p; q = self.q; T = self.T; M = self.M;
+            N = size(Y, 3);
             Sn = repmat(S, [1 1 N]);
             
             iter = 0;
             logLikeBase = NaN;
-            while iter < maxIter && (iter <= 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance)
+            while iter <= 2 || (self.logLike(end) - self.logLike(end - 1)) / (self.logLike(end - 1) - logLikeBase) > self.params.Tolerance
                 
                 iter = iter + 1;
                 
@@ -310,7 +340,7 @@ classdef GPFA
                 for i = 1 : p
                     ndx = i : p : T * p;
                     EXi = permute(EX(i, :, :), [2 3 1]);
-                    EXX = N * VarX(ndx, ndx) + (EXi * EXi');
+                    EXX = VarX(ndx, ndx) + (EXi * EXi') / N;
                     fun = @(gamma) self.Egamma(gamma, EXX);
                     self.gamma(i) = minimize(self.gamma(i), fun, -10);
                 end
@@ -330,29 +360,12 @@ classdef GPFA
             end
         end
         
-        
-        function [Kb, Kbi, logdetKb] = makeKb(self)
-            
-            T = self.T;
-            p = self.p;
-            Kb = zeros(T * p, T * p);
-            Kbi = zeros(T * p, T * p);
-            logdetKb = 0;
-            for i = 1 : p
-                K = toeplitz(self.covFun(0 : T - 1, self.gamma(i)));
-                ndx = i : p : T * p;
-                Kb(ndx, ndx) = K;
-                [Kbi(ndx, ndx), logdetK] = invToeplitz(K);
-                logdetKb = logdetKb + logdetK;
-            end
-        end
-        
     end
     
     
     methods (Static)
         
-        function [gpfa, Y, S] = toyExample()
+        function [gpfa, Y, X, S] = toyExample()
             % Create toy example for testing
             
             N = 100;
@@ -378,15 +391,14 @@ classdef GPFA
             Y = chol(R)' * randn(q, T * N) + C * X + D * Sn;
             Y = reshape(Y, [q T N]);
             
-            gpfa = gpfa.collect(Y, S, C, D, R, gamma, X);
+            gpfa = gpfa.collect(C, R, gamma, S, D);
             gpfa.T = T;
-            gpfa.N = N;
             gpfa.p = p;
             gpfa.q = q;
         end
         
         
-        function [gpfa, Y, S] = toyExampleOri(noise)
+        function [gpfa, Y, X, S] = toyExampleOri(noise)
             % Toy example with up/down states being orientation-domain
             % specific.
             
@@ -426,9 +438,8 @@ classdef GPFA
             Y = reshape(Y, [q T N]);
             
             gpfa = GPFA();
-            gpfa = gpfa.collect(Y, S, C, D, R, [], X);
+            gpfa = gpfa.collect(C, R, [], S, D);
             gpfa.T = T;
-            gpfa.N = N;
             gpfa.p = p;
             gpfa.q = q;
         end

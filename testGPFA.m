@@ -3,27 +3,28 @@
 
 % create toy example
 rng(1)
-% [grd, Y, S] = GPFA.toyExample();
-% [grd, Y, S] = GPFA.toyExampleOri('gauss');
-[grd, Y, S] = GPFA.toyExampleOri('poisson');
-grd = grd.normFactors();
+% [grd, Y, X, S] = GPFA.toyExample();
+% [grd, Y, X, S] = GPFA.toyExampleOri('gauss');
+[grd, Y, X, S] = GPFA.toyExampleOri('poisson');
+[grd, X] = grd.normFactors(X);
 
 % fit model
 model = GPFA('Tolerance', 1e-6);
-model = model.fit(Y, S, grd.p);
-model = model.normFactors();
+model = model.fit(Y, grd.p, S);
+[model, Xest] = model.normFactors(Y);
 
 
 %% diagnostic plots
 cc = model.C' * grd.C;
 [~, ndx] = max(abs(cc));
+N = size(Y, 3);
 for i = 1 : model.p
     subplot(3, model.p, i)
     cla, hold on
-    plot(grd.X(i, :), 'k')
-    plot(sign(cc(ndx(i), i)) * model.X(ndx(i), :), 'r')
+    plot(X(i, :), 'k')
+    plot(sign(cc(ndx(i), i)) * Xest(ndx(i), :), 'r')
     axis tight
-    plot(repmat((1 : model.N - 1) * model.T, 2, 1), ylim, 'k')
+    plot(repmat((1 : N - 1) * model.T, 2, 1), ylim, 'k')
     ylabel(sprintf('Factor %d', i))
     xlabel('Time')
     xlim([0 100])
