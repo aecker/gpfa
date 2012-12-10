@@ -338,7 +338,7 @@ classdef GPFA
                     EXi = permute(EX(i, :, :), [2 3 1]);
                     EXX = VarX(ndx, ndx) + (EXi * EXi') / N;
                     fun = @(gamma) self.Egamma(gamma, EXX);
-                    self.gamma(i) = minimize(self.gamma(i), fun, -10);
+                    self.gamma(i) = minimize(self.gamma(i), fun, -25);
                 end
                 self.tau = exp(-self.gamma / 2);
 
