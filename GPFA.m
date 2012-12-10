@@ -50,7 +50,6 @@ classdef GPFA
             p = inputParser; %#ok<*PROP>
             p.KeepUnmatched = true;
             p.addOptional('SigmaN', 1e-3);
-            p.addOptional('Seed', 1);
             p.addOptional('Tolerance', 1e-4);
             p.addOptional('Verbose', false);
             p.parse(varargin{:});
@@ -89,9 +88,6 @@ classdef GPFA
             self.T = T;
             self.M = M;
             self.p = p;
-            
-            % ensure deterministic behavior
-            rng(self.params.Seed);
             
             if nargin < 5
                 Yn = reshape(Y, q, T * N);
