@@ -130,6 +130,19 @@ classdef GPFA
             S = self.S; C = self.C; D = self.D; R = self.R;
             N = size(Y, 3);
             
+            % catch independent case
+            if p == 0
+                EX = zeros(0, T, N);
+                VarX = [];
+                if nargout == 3
+                    Y = reshape(Y, q, T * N);
+                    val = N * T * (sum(log(diag(R))) + q * log(2 * pi));
+                    normY = bsxfun(@rdivide, Y, sqrt(diag(R)));
+                    logLike = -0.5 * (val + normY(:)' * normY(:));
+                end
+                return
+            end
+            
             % compute GP covariance and its inverse
             Kb = zeros(T * p, T * p);
             Kbi = zeros(T * p, T * p);
@@ -290,6 +303,12 @@ classdef GPFA
             S = self.S; p = self.p; q = self.q; T = self.T; M = self.M;
             N = size(Y, 3);
             Sn = repmat(S, [1 1 N]);
+            
+            % catch independent case
+            if p == 0
+                [~, ~, self.logLike] = self.estX(Y);
+                return
+            end
             
             iter = 0;
             logLikeBase = NaN;
