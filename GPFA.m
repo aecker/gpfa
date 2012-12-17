@@ -190,13 +190,22 @@ classdef GPFA
         function [Yres, X] = resid(self, Y)
             % Compute residuals after accounting for internal factors.
             
-            Yres = zeros(size(Y));
+            [Ypred, X] = predict(self, Y);
+            Yres = Y - Ypred;
+        end
+        
+        
+        function [Ypred, X] = predict(self, Y)
+            % Prediction of activity based on inference of latent factors.
+            
+            Ypred = zeros(size(Y));
             N = size(Y, 3);
             X = self.estX(Y);
             for i = 1 : N
-                Yres(:, :, i) = Y(:, :, i) - self.C * X(:, :, i);
+                Ypred(:, :, i) = self.C * X(:, :, i);
             end
         end
+        
         
         function k = covFun(self, t, gamma)
             % Gaussian process covariance function
