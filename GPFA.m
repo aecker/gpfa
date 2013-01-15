@@ -195,6 +195,31 @@ classdef GPFA
         end
         
         
+        function [R, X] = residCov(self, Y)
+            % Residual covariance.
+            %   R = residCov returns the residual covariance after
+            %   accounting for the internal factors X.
+            %
+            %   Note: this residuals covariance is computed using the
+            %         update rule of the EM algorithm. It is not the same
+            %         as computing the covariance of the residuals as in
+            %         cov(model.resid(Y)).
+
+            T = self.T; M = self.M; N = size(Y, 3);
+            C = self.C; D = self.D; S = self.S;
+            p = self.p; q = self.q;
+            X = self.estX(Y);
+            if M > 0
+                Yres = bsxfun(@minus, Y, D * S);
+            else
+                Yres = Y;
+            end
+            Yres = reshape(Yres, q, T * N);
+            X = reshape(X, p, T * N);
+            R = (Yres * Yres' - (Yres * X') * C') / (T * N);
+        end
+
+
         function [Ypred, X] = predict(self, Y)
             % Prediction of activity based on inference of latent factors.
             
