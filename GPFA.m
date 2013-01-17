@@ -227,11 +227,18 @@ classdef GPFA
             %         cov(model.resid(Y)).
 
             T = self.T; N = size(Y, 3); p = self.p; q = self.q; C = self.C; 
-            X = self.estX(Y);
+            [X, VarX] = self.estX(Y);
             Y0 = self.subtractMean(Y);
             Y0 = reshape(Y0, q, T * N);
+            EXX = 0;
+            for t = 1 : T
+                x = permute(X(:, t, :), [1 3 2]);
+                tt = (1 : p) + p * (t - 1);
+                EXX = EXX + N * VarX(tt, tt) + x * x';
+            end
             X = reshape(X, p, T * N);
-            R = (Y0 * Y0' - (Y0 * X') * C') / (T * N);
+            Y0XC = (Y0 * X') * C';
+            R = (Y0 * Y0' - Y0XC - Y0XC' + C * EXX * C') / (T * N);
         end
 
 
