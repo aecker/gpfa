@@ -6,7 +6,7 @@ classdef GPFA
     % influenced by Byron Yu and John Cunningham's code.
     %
     % Alexander S. Ecker
-    % 2012-10-12
+    % 2013-01-17
     
     properties
         params      % parameters for fitting
@@ -21,6 +21,7 @@ classdef GPFA
         p           % # unobserved factors
         q           % # neurons
         logLike     % log-likelihood curve during fitting
+        means       % method of estimating means (zero|hist|reg)
     end
     
     properties (Access = private)
@@ -78,8 +79,14 @@ classdef GPFA
             if nargin < 4 || isempty(S)
                 M = 0;
                 S = [];
+                means = 'zero';
+            elseif ischar(S) && strcmp(S, 'hist')
+                M = T;
+                S = [];
+                means = 'hist';
             else
                 [M, Tc] = size(S);
+                means = 'reg';
                 assert(T == Tc, 'The number of columns in S and Y must be the same!')
             end
             assert(q > p, 'Number of latent factors must be smaller than number of neurons.')
@@ -88,18 +95,23 @@ classdef GPFA
             self.T = T;
             self.M = M;
             self.p = p;
+            self.means = means;
             
             if nargin < 5
                 Yn = reshape(Y, q, T * N);
 
-                if M > 0
-                    % initialize stimulus weights using linear regression
-                    Sn = repmat(S, 1, N);
-                    D = Yn / Sn;
-                    Yres = Yn - D * Sn;
-                else
-                    D = [];
-                    Yres = Yn;
+                switch means
+                    case 'zero'
+                        D = [];
+                        Yres = Yn;
+                    case 'hist'
+                        D = mean(Y, 3);
+                        Yres = Yn - repmat(D, 1, N);
+                    case 'reg'
+                        % initialize stimulus weights using linear regression
+                        Sn = repmat(S, 1, N);
+                        D = Yn / Sn;
+                        Yres = Yn - D * Sn;
                 end
                 
                 % initialize factor loadings using PCA
@@ -126,8 +138,7 @@ classdef GPFA
             % Estimate latent factors (and log-likelihood).
             %   [EX, VarX, logLike] = self.estX(Y)
             
-            T = self.T; M = self.M; q = self.q; p = self.p;
-            S = self.S; C = self.C; D = self.D; R = self.R;
+            T = self.T; q = self.q; p = self.p; C = self.C; R = self.R;
             N = size(Y, 3);
             
             % catch independent case
@@ -165,11 +176,7 @@ classdef GPFA
             KbCb = Kb * Cb'; % [TODO] optimize: K is block-diagonal
             % KbCb = kron(K, C'); % if all Ks/taus are equal
             CKCRi = Rbi - RbiCb * VarX * RbiCb';
-            if M > 0
-                Yres = bsxfun(@minus, Y, D * S);
-            else
-                Yres = Y;
-            end
+            Yres = self.subtractMean(Y);
             Yres = reshape(Yres, q * T, N);
             EX = KbCb * CKCRi * Yres;
             EX = reshape(EX, [p T N]);
@@ -183,6 +190,20 @@ classdef GPFA
                 CRiYres = reshape(RiC' * Yres, p * T, N);
                 logLike = 0.5 * (N * val - normYres(:)' * normYres(:) + ...
                     sum(sum(CRiYres .* (VarX * CRiYres))));
+            end
+        end
+        
+        
+        function Yres = subtractMean(self, Y)
+            % Subtract mean.
+            
+            switch self.means
+                case 'zero'
+                    Yres = Y;
+                case 'hist'
+                    Yres = bsxfun(@minus, Y, self.D);
+                case 'reg'
+                    Yres = bsxfun(@minus, Y, self.D * self.S);
             end
         end
         
@@ -205,15 +226,9 @@ classdef GPFA
             %         as computing the covariance of the residuals as in
             %         cov(model.resid(Y)).
 
-            T = self.T; M = self.M; N = size(Y, 3);
-            C = self.C; D = self.D; S = self.S;
-            p = self.p; q = self.q;
+            T = self.T; N = size(Y, 3); p = self.p; q = self.q; C = self.C; 
             X = self.estX(Y);
-            if M > 0
-                Yres = bsxfun(@minus, Y, D * S);
-            else
-                Yres = Y;
-            end
+            Yres = self.subtractMean(Y);
             Yres = reshape(Yres, q, T * N);
             X = reshape(X, p, T * N);
             R = (Yres * Yres' - (Yres * X') * C') / (T * N);
@@ -362,24 +377,27 @@ classdef GPFA
                     T1(:, 1 : p) = T1(:, 1 : p) + y * x';
                     tt = (1 : p) + p * (t - 1);
                     T2(1 : p, 1 : p) = T2(1 : p, 1 : p) + N * VarX(tt, tt) + x * x';
-                    if M > 0
-                        s = permute(Sn(:, t, :), [1 3 2]);
-                        sx = x * s';
-                        T1(:, p + (1 : M)) = T1(:, p + (1 : M)) + y * s';
-                        T2(1 : p, p + (1 : M)) = T2(1 : p, p + (1 : M)) + sx;
-                        T2(p + (1 : M), 1 : p) = T2(p + (1 : M), 1 : p) + sx';
-                        T2(p + (1 : M), p + (1 : M)) = T2(p + (1 : M), p + (1 : M)) + s * s';
+                    switch self.means
+                        case 'hist'
+                            T1(:, p + t) = sum(y, 2);
+                            sx = sum(x, 2);
+                            T2(1 : p, p + t) = sx;
+                            T2(p + t, 1 : p) = sx';
+                            T2(p + t, p + t) = N;
+                        case 'reg'
+                            s = permute(Sn(:, t, :), [1 3 2]);
+                            sx = x * s';
+                            T1(:, p + (1 : M)) = T1(:, p + (1 : M)) + y * s';
+                            T2(1 : p, p + (1 : M)) = T2(1 : p, p + (1 : M)) + sx;
+                            T2(p + (1 : M), 1 : p) = T2(p + (1 : M), 1 : p) + sx';
+                            T2(p + (1 : M), p + (1 : M)) = T2(p + (1 : M), p + (1 : M)) + s * s';
                     end
                 end
                 CD = T1 / T2;
                 self.C = CD(:, 1 : p);
                 self.D = CD(:, p + (1 : M));
                 
-                if M > 0
-                    Yres = bsxfun(@minus, Y, self.D * S);
-                else
-                    Yres = Y;
-                end
+                Yres = self.subtractMean(Y);
                 Yres = reshape(Yres, q, T * N);
                 self.R = diag(mean(Yres .^ 2, 2) - ...
                     sum(bsxfun(@times, Yres * reshape(EX, p, T * N)', self.C), 2) / (T * N));

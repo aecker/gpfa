@@ -10,7 +10,8 @@ rng(1)
 
 % fit model
 model = GPFA('Tolerance', 1e-6);
-model = model.fit(Y, grd.p, S);
+model = model.fit(Y, grd.p, 'hist');
+% model = model.fit(Y, grd.p, S);
 [model, Xest] = model.normFactors(Y);
 
 
