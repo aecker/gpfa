@@ -103,19 +103,19 @@ classdef GPFA
                 switch means
                     case 'zero'
                         D = [];
-                        Yres = Yn;
+                        Y0 = Yn;
                     case 'hist'
                         D = mean(Y, 3);
-                        Yres = Yn - repmat(D, 1, N);
+                        Y0 = Yn - repmat(D, 1, N);
                     case 'reg'
                         % initialize stimulus weights using linear regression
                         Sn = repmat(S, 1, N);
                         D = Yn / Sn;
-                        Yres = Yn - D * Sn;
+                        Y0 = Yn - D * Sn;
                 end
                 
                 % initialize factor loadings using PCA
-                Q = cov(Yres');
+                Q = cov(Y0');
                 [C, Lambda] = eigs(Q, p);
                 
                 % initialize private noise as residual variance not accounted
@@ -176,34 +176,34 @@ classdef GPFA
             KbCb = Kb * Cb'; % [TODO] optimize: K is block-diagonal
             % KbCb = kron(K, C'); % if all Ks/taus are equal
             CKCRi = Rbi - RbiCb * VarX * RbiCb';
-            Yres = self.subtractMean(Y);
-            Yres = reshape(Yres, q * T, N);
-            EX = KbCb * CKCRi * Yres;
+            Y0 = self.subtractMean(Y);
+            Y0 = reshape(Y0, q * T, N);
+            EX = KbCb * CKCRi * Y0;
             EX = reshape(EX, [p T N]);
             
             % calculate log-likelihood
             if nargout > 2
-                Yres = reshape(Yres, q, T * N);
+                Y0 = reshape(Y0, q, T * N);
                 val = -T * sum(log(diag(R))) - logdetKb - logdetM - ...
                     q * T * log(2 * pi);
-                normYres = bsxfun(@rdivide, Yres, sqrt(diag(R)));
-                CRiYres = reshape(RiC' * Yres, p * T, N);
-                logLike = 0.5 * (N * val - normYres(:)' * normYres(:) + ...
-                    sum(sum(CRiYres .* (VarX * CRiYres))));
+                normY0 = bsxfun(@rdivide, Y0, sqrt(diag(R)));
+                CRiY0 = reshape(RiC' * Y0, p * T, N);
+                logLike = 0.5 * (N * val - normY0(:)' * normY0(:) + ...
+                    sum(sum(CRiY0 .* (VarX * CRiY0))));
             end
         end
         
         
-        function Yres = subtractMean(self, Y)
+        function Y0 = subtractMean(self, Y)
             % Subtract mean.
             
             switch self.means
                 case 'zero'
-                    Yres = Y;
+                    Y0 = Y;
                 case 'hist'
-                    Yres = bsxfun(@minus, Y, self.D);
+                    Y0 = bsxfun(@minus, Y, self.D);
                 case 'reg'
-                    Yres = bsxfun(@minus, Y, self.D * self.S);
+                    Y0 = bsxfun(@minus, Y, self.D * self.S);
             end
         end
         
@@ -228,10 +228,10 @@ classdef GPFA
 
             T = self.T; N = size(Y, 3); p = self.p; q = self.q; C = self.C; 
             X = self.estX(Y);
-            Yres = self.subtractMean(Y);
-            Yres = reshape(Yres, q, T * N);
+            Y0 = self.subtractMean(Y);
+            Y0 = reshape(Y0, q, T * N);
             X = reshape(X, p, T * N);
-            R = (Yres * Yres' - (Yres * X') * C') / (T * N);
+            R = (Y0 * Y0' - (Y0 * X') * C') / (T * N);
         end
 
 
@@ -397,10 +397,10 @@ classdef GPFA
                 self.C = CD(:, 1 : p);
                 self.D = CD(:, p + (1 : M));
                 
-                Yres = self.subtractMean(Y);
-                Yres = reshape(Yres, q, T * N);
-                self.R = diag(mean(Yres .^ 2, 2) - ...
-                    sum(bsxfun(@times, Yres * reshape(EX, p, T * N)', self.C), 2) / (T * N));
+                Y0 = self.subtractMean(Y);
+                Y0 = reshape(Y0, q, T * N);
+                self.R = diag(mean(Y0 .^ 2, 2) - ...
+                    sum(bsxfun(@times, Y0 * reshape(EX, p, T * N)', self.C), 2) / (T * N));
                 
                 % optimize gamma
                 self.gamma = zeros(p, 1);
