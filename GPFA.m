@@ -242,6 +242,24 @@ classdef GPFA
         end
 
 
+        function [R, X] = residCovByTrial(self, Y)
+            % Residual covariance for spike counts over entire trial.
+            %   R = self.residCovByTrial(Y) returns the residual covariance
+            %   of the spike counts for entire trials after accounting for
+            %   the internal factors X.
+
+            T = self.T; N = size(Y, 3); p = self.p; C = self.C;
+            [X, VarX] = self.estX(Y);
+            X = reshape(X, [p * T, N]);
+            Y0 = self.subtractMean(Y);
+            Z = permute(sum(Y0, 2), [1 3 2]);
+            Ct = repmat(C, 1, T);
+            CXZ = Ct * X * Z';
+            EXX = N * VarX + X * X';
+            R = (Z * Z' - CXZ - CXZ' + Ct * EXX * Ct') / N;
+        end
+
+
         function [Ypred, X] = predict(self, Y)
             % Prediction of activity based on inference of latent factors.
             
@@ -439,13 +457,15 @@ classdef GPFA
     
     methods (Static)
         
-        function [gpfa, Y, X, S] = toyExample()
+        function [gpfa, Y, X, S] = toyExample(N)
             % Create toy example for testing
             
-            N = 100;
+            if ~nargin
+                N = 100;
+            end
             T = 20;
             p = 2;
-            q = 8;
+            q = 16;
             gamma = log(1 ./ [4; 1] .^ 2);
 
             gpfa = GPFA();
