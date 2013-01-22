@@ -283,6 +283,9 @@ classdef GPFA
         
         function [self, X] = ortho(self, X)
             % Orthogonalize factor loadings
+            %
+            %   Caution: After applying this transformation, the model
+            %   cannot be used for inference on new data.
             
             [self.C, S, V] = svd(self.C, 'econ');
             if nargout > 1
@@ -299,6 +302,11 @@ classdef GPFA
         
         function [self, X] = normLoadings(self, X)
             % Normalize factor loadings
+            %
+            %   Caution: Covariance function is not adjusted properly.
+            %   After applying this transformation inference of latent
+            %   factors won't be correct any more. This can be fixed but
+            %   hasn't been done yet.
             
             n = sqrt(sum(self.C .^ 2, 1));
             self.C = bsxfun(@rdivide, self.C, n);
@@ -315,6 +323,11 @@ classdef GPFA
         
         function [self, X] = normFactors(self, X)
             % Normalize factors to unit variance
+            %
+            %   Caution: Covariance function is not adjusted properly.
+            %   After applying this transformation inference of latent
+            %   factors won't be correct any more. This can be fixed but
+            %   hasn't been done yet.
             
             if size(X, 1) == self.q  % Y passed -> estimte X
                 X = self.estX(X);
