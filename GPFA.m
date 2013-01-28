@@ -130,6 +130,7 @@ classdef GPFA
             
             % run EM
             self = self.EM(Y);
+            self = self.reorderFactors();
             self.runtime = (now() - self.runtime) * 24 * 3600 * 1000; % ms
         end
         
@@ -465,6 +466,21 @@ classdef GPFA
             end
         end
         
+
+        function self = reorderFactors(self)
+            % Re-order factors according to covariance explained.
+
+            C = self.C; p = self.p;
+            v = zeros(p, 1);
+            for i = 1 : p
+                v(i) = mean(mean(C(:, i) * C(:, i)'));
+            end
+            [~, order] = sort(v, 'descend');
+            C = C(:, order);
+            C = bsxfun(@times, C, sign(median(C, 1)));   % flip sign?
+            self.C = C;
+        end
+
     end
     
     
