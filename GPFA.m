@@ -207,8 +207,22 @@ classdef GPFA
                     Y0 = bsxfun(@minus, Y, self.D * self.S);
             end
         end
-        
-        
+
+
+        function Y = addMean(self, Y0)
+            % Add mean.
+
+            switch self.means
+                case 'zero'
+                    Y = Y0;
+                case 'hist'
+                    Y = bsxfun(@plus, Y0, self.D);
+                case 'reg'
+                    Y = bsxfun(@plus, Y0, self.D * self.S);
+            end
+        end
+
+
         function [Yres, X] = resid(self, Y)
             % Compute residuals after accounting for internal factors.
             
@@ -270,6 +284,7 @@ classdef GPFA
             for i = 1 : N
                 Ypred(:, :, i) = self.C * X(:, :, i);
             end
+            Ypred = self.addMean(Ypred);
         end
         
         
