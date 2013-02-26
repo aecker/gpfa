@@ -286,8 +286,26 @@ classdef GPFA
             end
             Ypred = self.addMean(Ypred);
         end
-        
-        
+
+
+        function ve = varExpl(self, Y)
+            % Compute variance explained by model.
+
+            X = self.estX(Y);
+            Y0 = self.subtractMean(Y);
+            ve = self.C .^ 2 * var(X(1 : end, :), [], 2) ./ var(Y0(1 : end, :), [], 2);
+        end
+
+
+        function ve = varExplByTrial(self, Y)
+            % Compute variance explained for spike counts of entire trial.
+
+            X = self.estX(Y);
+            Y0 = self.subtractMean(Y);
+            ve = self.C .^ 2 * var(sum(X, 2), [], 3) ./ var(sum(Y0, 2), [], 3);
+        end
+
+
         function k = covFun(self, t, gamma)
             % Gaussian process covariance function
             
