@@ -231,47 +231,24 @@ classdef GPFA
         end
         
         
-        function [R, X] = residCov(self, Y)
+        function [R, X] = residCov(self, Y, byTrial)
             % Residual covariance.
-            %   R = residCov returns the residual covariance after
-            %   accounting for the internal factors X.
+            %   R = model.residCov(Y) returns the residual covariance using
+            %   data Y after accounting for latent factors.
+            %
+            %   R = model.residCov(Y, true) returns the residual covariance
+            %   for spike counts summed over the entire trial.
             %
             %   Note: this residuals covariance is computed using the
             %         update rule of the EM algorithm. It is not the same
             %         as computing the covariance of the residuals as in
             %         cov(model.resid(Y)).
 
-            T = self.T; N = size(Y, 3); p = self.p; q = self.q; C = self.C; 
-            [X, VarX] = self.estX(Y);
-            Y0 = self.subtractMean(Y);
-            Y0 = reshape(Y0, q, T * N);
-            EXX = 0;
-            for t = 1 : T
-                x = permute(X(:, t, :), [1 3 2]);
-                tt = (1 : p) + p * (t - 1);
-                EXX = EXX + N * VarX(tt, tt) + x * x';
+            if nargin < 3 || ~byTrial
+                [R, X] = self.residCovByBin(Y);
+            else
+                [R, X] = self.residCovByTrial(Y);
             end
-            X = reshape(X, p, T * N);
-            Y0XC = (Y0 * X') * C';
-            R = (Y0 * Y0' - Y0XC - Y0XC' + C * EXX * C') / (T * N);
-        end
-
-
-        function [R, X] = residCovByTrial(self, Y)
-            % Residual covariance for spike counts over entire trial.
-            %   R = self.residCovByTrial(Y) returns the residual covariance
-            %   of the spike counts for entire trials after accounting for
-            %   the internal factors X.
-
-            T = self.T; N = size(Y, 3); p = self.p; C = self.C;
-            [X, VarX] = self.estX(Y);
-            X = reshape(X, [p * T, N]);
-            Y0 = self.subtractMean(Y);
-            Z = permute(sum(Y0, 2), [1 3 2]);
-            Ct = repmat(C, 1, T);
-            CXZ = Ct * X * Z';
-            EXX = N * VarX + X * X';
-            R = (Z * Z' - CXZ - CXZ' + Ct * EXX * Ct') / N;
         end
 
 
@@ -288,21 +265,20 @@ classdef GPFA
         end
 
 
-        function ve = varExpl(self, Y)
-            % Compute variance explained by model.
+        function ve = varExpl(self, Y, byTrial)
+            % Variance explained by model.
+            %   ve = model.varExpl(Y) computes the fraction of variance
+            %   explained by the model.
+            %
+            %   ve = model.varExpl(Y, true) uses spike counts summed over
+            %   the entire trial to compute the fraction of variance
+            %   explained.
 
-            X = self.estX(Y);
-            Y0 = self.subtractMean(Y);
-            ve = self.C .^ 2 * var(X(1 : end, :), [], 2) ./ var(Y0(1 : end, :), [], 2);
-        end
-
-
-        function ve = varExplByTrial(self, Y)
-            % Compute variance explained for spike counts of entire trial.
-
-            X = self.estX(Y);
-            Y0 = self.subtractMean(Y);
-            ve = self.C .^ 2 * var(sum(X, 2), [], 3) ./ var(sum(Y0, 2), [], 3);
+            if nargin < 3 || ~byTrial
+                ve = self.varExplByBin(Y);
+            else
+                ve = self.varExplByTrial(Y);
+            end
         end
 
 
@@ -512,6 +488,58 @@ classdef GPFA
             C = C(:, order);
             C = bsxfun(@times, C, sign(median(C, 1)));   % flip sign?
             self.C = C;
+        end
+
+
+        function [R, X] = residCovByBin(self, Y)
+            % Residual covariance for spike counts per bin.
+
+            T = self.T; N = size(Y, 3); p = self.p; q = self.q; C = self.C;
+            [X, VarX] = self.estX(Y);
+            Y0 = self.subtractMean(Y);
+            Y0 = reshape(Y0, q, T * N);
+            EXX = 0;
+            for t = 1 : T
+                x = permute(X(:, t, :), [1 3 2]);
+                tt = (1 : p) + p * (t - 1);
+                EXX = EXX + N * VarX(tt, tt) + x * x';
+            end
+            X = reshape(X, p, T * N);
+            Y0XC = (Y0 * X') * C';
+            R = (Y0 * Y0' - Y0XC - Y0XC' + C * EXX * C') / (T * N);
+        end
+
+
+        function [R, X] = residCovByTrial(self, Y)
+            % Residual covariance for spike counts over entire trial.
+
+            T = self.T; N = size(Y, 3); p = self.p; C = self.C;
+            [X, VarX] = self.estX(Y);
+            X = reshape(X, [p * T, N]);
+            Y0 = self.subtractMean(Y);
+            Z = permute(sum(Y0, 2), [1 3 2]);
+            Ct = repmat(C, 1, T);
+            CXZ = Ct * X * Z';
+            EXX = N * VarX + X * X';
+            R = (Z * Z' - CXZ - CXZ' + Ct * EXX * Ct') / N;
+        end
+
+
+        function ve = varExplByBin(self, Y)
+            % Compute variance explained for spike counts per bin..
+
+            X = self.estX(Y);
+            Y0 = self.subtractMean(Y);
+            ve = self.C .^ 2 * var(X(1 : end, :), [], 2) ./ var(Y0(1 : end, :), [], 2);
+        end
+
+
+        function ve = varExplByTrial(self, Y)
+            % Compute variance explained for spike counts of entire trial.
+
+            X = self.estX(Y);
+            Y0 = self.subtractMean(Y);
+            ve = self.C .^ 2 * var(sum(X, 2), [], 3) ./ var(sum(Y0, 2), [], 3);
         end
 
     end
