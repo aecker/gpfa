@@ -528,18 +528,20 @@ classdef GPFA
         function ve = varExplByBin(self, Y)
             % Compute variance explained for spike counts per bin..
 
-            X = self.estX(Y);
             Y0 = self.subtractMean(Y);
-            ve = self.C .^ 2 * var(X(1 : end, :), [], 2) ./ var(Y0(1 : end, :), [], 2);
+            V = mean(Y0(:, :) .^ 2, 2);
+            R = self.residCovByBin(Y);
+            ve = 1 - diag(R) ./ V;
         end
 
 
         function ve = varExplByTrial(self, Y)
             % Compute variance explained for spike counts of entire trial.
 
-            X = self.estX(Y);
             Y0 = self.subtractMean(Y);
-            ve = self.C .^ 2 * var(sum(X, 2), [], 3) ./ var(sum(Y0, 2), [], 3);
+            V = mean(sum(Y0, 2) .^ 2, 3);
+            R = self.residCovByTrial(Y);
+            ve = 1 - diag(R) ./ V;
         end
 
     end
