@@ -549,8 +549,10 @@ classdef GPFA
     
     methods (Static)
         
-        function [gpfa, Y, X, S] = toyExample(N)
+        function [model, Y, X, S] = toyExample(N)
             % Create toy example for testing
+            %   [model, Y, X, S] = toyExample(N) creates a simple toy
+            %   example with N neurons and two latent factors.
             
             if ~nargin
                 N = 100;
@@ -560,11 +562,11 @@ classdef GPFA
             q = 16;
             gamma = log(1 ./ [4; 1] .^ 2);
 
-            gpfa = GPFA();
+            model = GPFA();
             
-            K = toeplitz(gpfa.covFun(0 : T - 1, gamma(1)));
+            K = toeplitz(model.covFun(0 : T - 1, gamma(1)));
             X1 = chol(K)' * randn(T, N);
-            K = toeplitz(gpfa.covFun(0 : T - 1, gamma(2)));
+            K = toeplitz(model.covFun(0 : T - 1, gamma(2)));
             X2 = chol(K)' * randn(T, N);
             X = [X1(:), X2(:)]';
             
@@ -577,58 +579,12 @@ classdef GPFA
             Y = chol(R)' * randn(q, T * N) + C * X + D * Sn;
             Y = reshape(Y, [q T N]);
             
-            gpfa = gpfa.collect(C, R, gamma, S, D);
-            gpfa.T = T;
-            gpfa.p = p;
-            gpfa.q = q;
+            model = model.collect(C, R, gamma, S, D);
+            model.T = T;
+            model.p = p;
+            model.q = q;
         end
-        
-        
-        function [gpfa, Y, X, S] = toyExampleOri(noise)
-            % Toy example with up/down states being orientation-domain
-            % specific.
-            
-            if ~nargin, noise = 'gauss'; end
-        
-            N = 200;    % trials
-            T = 20;     % bins (e.g. 50 ms -> 1 sec trials)
-            p = 3;
-            q = 16;
 
-            [b, a] = butter(5, 0.05);
-            theta = cumsum(randn(1, N * T));
-            theta = filtfilt(b, a, theta);
-            ampl = randn(1, N * T);
-            ampl = filtfilt(b, a, ampl);
-            ampl = 2 ./ (1 + exp(3 * ampl)) - 1;
-            X = [cos(theta); sin(theta); ampl];
-            
-            phi = (0 : q - 1) / q * 2 * pi;
-            C = [cos(phi); sin(phi); ones(1, q)]';
-            C = bsxfun(@rdivide, C, sqrt(sum(C .^ 2, 1)));
-            
-            t = sin((linspace(0, 1, T) .^ (1 / 7)) * 3);
-            D = exp(cos(phi))' * t;
-            
-            R = diag(mean(D, 2));
-            
-            S = eye(T);
-            Sn = repmat(S, 1, N);
-            
-            switch noise
-                case 'gauss'
-                    Y = chol(R)' * randn(q, T * N) + C * X + D * Sn;
-                case 'poisson'
-                    Y = poissrnd(max(0, C * X + D * Sn));
-            end
-            Y = reshape(Y, [q T N]);
-            
-            gpfa = GPFA();
-            gpfa = gpfa.collect(C, R, [], S, D);
-            gpfa.T = T;
-            gpfa.p = p;
-            gpfa.q = q;
-        end
     end
     
 end
