@@ -15,6 +15,16 @@ Yu, B.M. et al., 2009. Gaussian-Process Factor Analysis for
 Low-Dimensional Single-Trial Analysis of Neural Population
 Activity. Journal of Neurophysiology, 102(1), pp.614–635.
 
+I used this model in the following paper:
+
+A.S. Ecker, P. Berens, R.J. Cotton, M. Subramaniyan, G.H. Denfield,
+C.R. Cadwell, S.M. Smirnakis, M. Bethge, A.S. Tolias (2014): State
+dependence of noise correlations in macaque primary visual cortex.
+Neuron.
+
+For more information go to: 
+http://toliaslab.org/publications/ecker-et-al-2014/
+
 
 What's the difference?
 ======================
@@ -36,10 +46,3 @@ some additions but also allowed me to simplify some aspects:
   number of latent factors have been accounted for. This can be
   useful if you want to estimate the covariance in the presence
   of some confounder, which is modeled by the latent factor.
-
-
-Disclaimer
-==========
-
-This is work in progress. Not all aspects of the code have been
-tested thoroughly. Use with care and at your own risk!
