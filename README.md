@@ -13,7 +13,7 @@ Details about the model can be found in the following paper:
 
 Yu, B.M. et al., 2009. Gaussian-Process Factor Analysis for
 Low-Dimensional Single-Trial Analysis of Neural Population
-Activity. Journal of Neurophysiology, 102(1), pp.614–635.
+Activity. Journal of Neurophysiology, 102(1), pp.614-635.
 
 I used this model in the following paper:
 
