@@ -143,7 +143,9 @@ classdef GPFA
         
         function [EX, VarX, logLike] = estX(self, Y)
             % Estimate latent factors (and log-likelihood).
-            %   [EX, VarX, logLike] = self.estX(Y)
+            %   [EX, VarX, logLike] = self.estX(Y) returns the expected
+            %   value (EX) of the latent state X, its variance (VarX), and
+            %   the log-likelihood (logLike) of the data Y.
             
             T = self.T; q = self.q; p = self.p; C = self.C; R = self.R;
             N = size(Y, 3);
