@@ -36,7 +36,11 @@ classdef GPFA
             %   constructs a GPFA object with the following optional
             %   parameters:
             %
-            %   TODO
+            %   SigmaN:     Innovation noise variance for the latent 
+            %               Gaussian Process (default: 0.001)
+            %   Tolerance:  Stopping criterion used for fitting (default:
+            %               0.0001)
+            %   Verbose:    Verbose output? (default: false)
             
             % initialize from struct?
             if nargin && isstruct(varargin{1})
@@ -61,7 +65,9 @@ classdef GPFA
         function self = fit(self, Y, p, S, C, D, R, gamma)
             % Fit the model
             %   self = fit(self, Y, p) fits the model to data Y using p
-            %   latent factors.
+            %   latent factors. Y is assumed to residuals (i.e. the mean
+            %   for each bin across trials has been subtracted). Y is a 3d
+            %   array of size #neurons x #bins x #trials.
             %
             %   self = fit(self, Y, p, S) additionally uses S as basis
             %   functions for predicting the PSTHs.
