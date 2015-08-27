@@ -560,7 +560,8 @@ classdef GPFA
         function [model, Y, X, S] = toyExample(N)
             % Create toy example for testing
             %   [model, Y, X, S] = toyExample(N) creates a simple toy
-            %   example with N neurons and two latent factors.
+            %   example with 16 neurons and two latent factors, sampling N
+            %   trials of activity.
             
             if ~nargin
                 N = 100;
